@@ -14,7 +14,7 @@ train_size = 0.9
 test_size = 0.1
 train_path = '../data/train.json'
 train_topic_path = '../data/train_topic.json'
-model_name = 'bert-base-chinese'
+model_path = '../bert-base-chinese'
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(f"device: {device}")
 
@@ -22,7 +22,7 @@ print(f"device: {device}")
 class MyModel(torch.nn.Module):
     def __init__(self, num_labels, dropout_prob):
         super(MyModel, self).__init__()
-        self.bert = BertModel.from_pretrained(model_name)
+        self.bert = BertModel.from_pretrained(model_path)
         self.dropout = torch.nn.Dropout(dropout_prob)
         self.classifier = torch.nn.Linear(self.bert.config.hidden_size, num_labels)
 
@@ -109,7 +109,7 @@ if __name__ == '__main__':
     train_data, test_data = train_test_split(train_data, test_size=test_size, train_size=train_size, random_state=42)
 
     # 初始化tokenizer
-    tokenizer = BertTokenizer.from_pretrained(model_name)
+    tokenizer = BertTokenizer.from_pretrained(model_path)
 
     # 创建数据集
     train_dataset = MyDataset(train_data, topic_data, tokenizer)
@@ -128,8 +128,8 @@ if __name__ == '__main__':
 
     # 训练循环
     print("Training...")
+    model.train()
     for epoch in range(num_epochs):
-        model.train()  # 设置模型为训练模式
         total_loss = 0.0
 
         # 训练每一批次
@@ -149,25 +149,23 @@ if __name__ == '__main__':
         avg_train_loss = total_loss / len(train_loader)
         print(f"Epoch {epoch + 1}/{num_epochs}, Average Training Loss: {avg_train_loss:.4f}")
 
-        # 测试每个epoch的性能
-        model.eval()  # 设置模型为评估模式
-        with torch.no_grad():
-            true_labels = []
-            pred_labels = []
-            for batch in test_loader:
-                input_ids = batch['input_ids'].to(device)
-                attention_mask = batch['attention_mask'].to(device)
-                labels = batch['label'].to(device)
+    # 测试阶段
+    model.eval()
+    print("Evaluating...")
+    with torch.no_grad():
+        true_labels = []
+        pred_labels = []
+        for batch in test_loader:
+            input_ids = batch['input_ids'].to(device)
+            attention_mask = batch['attention_mask'].to(device)
+            labels = batch['label'].to(device)
 
-                logits = model(input_ids, attention_mask)
-                predictions = torch.argmax(logits, dim=1)
+            logits = model(input_ids, attention_mask)
+            predictions = torch.argmax(logits, dim=1)
 
-                true_labels.extend(labels.cpu().numpy())
-                pred_labels.extend(predictions.cpu().numpy())
+            true_labels.extend(labels.cpu().numpy())
+            pred_labels.extend(predictions.cpu().numpy())
 
-            # 计算准确率
-            accuracy = np.mean(np.array(true_labels) == np.array(pred_labels))
-            print(f"Epoch {epoch + 1}, Test Accuracy: {accuracy * 100:.2f}%")
-
-        # 重新设置模型为训练模式
-        model.train()
+        # 计算准确率
+        accuracy = np.mean(np.array(true_labels) == np.array(pred_labels))
+        print(f"Test Accuracy: {accuracy * 100:.2f}%")
