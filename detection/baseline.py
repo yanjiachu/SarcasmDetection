@@ -2,18 +2,18 @@ import json
 import torch
 import numpy as np
 from torch.utils.data import DataLoader, Dataset
-from transformers import BertTokenizer, BertModel, AdamW
+from transformers import BertTokenizer, BertModel
 from sklearn.model_selection import train_test_split
 
 # 定义超参数
 batch_size = 16
 learning_rate = 5e-5
 dropout_prob = 0.1
-num_epochs = 3
+num_epochs = 10
 train_size = 0.9
 test_size = 0.1
-train_path = 'data/train.json'
-train_topic_path = 'data/train_topic.json'
+train_path = '../data/train.json'
+train_topic_path = '../data/train_topic.json'
 model_name = 'bert-base-chinese'
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(f"device: {device}")
