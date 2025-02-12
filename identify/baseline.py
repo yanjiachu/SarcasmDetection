@@ -2,13 +2,13 @@ import json
 import torch
 import numpy as np
 from torch.utils.data import DataLoader, Dataset
-from transformers import BertTokenizer, BertForTokenClassification
+from transformers import BertTokenizerFast, BertModel
 from sklearn.model_selection import train_test_split
 
 # 定义超参数
 batch_size = 16
 learning_rate = 5e-5
-num_epochs = 3
+num_epochs = 2
 train_size = 0.9
 test_size = 0.1
 train_path = '../data/train.json'
@@ -16,6 +16,35 @@ train_topic_path = '../data/train_topic.json'
 model_path = '../bert-base-chinese'
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(f"Using device: {device}")
+
+# 定义封装的模型
+class MyModel(torch.nn.Module):
+    def __init__(self, num_labels, dropout_prob):
+        super(MyModel, self).__init__()
+        self.bert = BertModel.from_pretrained(model_path)
+        self.dropout = torch.nn.Dropout(dropout_prob)
+        self.classifier = torch.nn.Linear(self.bert.config.hidden_size, num_labels)
+
+        # 冻结 BERT 参数
+        for param in self.bert.parameters():
+            param.requires_grad = False
+
+    def forward(self, input_ids, attention_mask, labels=None):
+        outputs = self.bert(
+            input_ids=input_ids,
+            attention_mask=attention_mask
+        )
+        pooled_output = outputs.last_hidden_state  # 使用最后一层的隐藏状态
+        pooled_output = self.dropout(pooled_output)
+        logits = self.classifier(pooled_output)
+
+        if labels is not None:
+            loss_fct = torch.nn.CrossEntropyLoss()
+            loss = loss_fct(logits.view(-1, self.classifier.out_features), labels.view(-1))
+            return logits, loss
+        else:
+            return logits
+
 
 # 定义标签
 label2id = {'B-ORG': 0, 'I-ORG': 1, 'O': 2}
@@ -63,21 +92,26 @@ class SarcasmTargetDataset(Dataset):
             offsets = encoding['offset_mapping'].squeeze().tolist()
             labels = [self.label2id['O']] * len(offsets)
             for target in sarcasm_target:
+                if not isinstance(target, str):  # 确保目标是字符串类型
+                    continue  # 跳过非字符串类型的目标
+
                 # 假设target是一个词，并且在分词后的offsets中
                 # 这里需要根据实际情况匹配目标词的位置
-                start, end = None, None
-                for i, offset in enumerate(offsets):
-                    if offset[0] <= input_text.find(target) < offset[1]:
-                        start = i
+                start_char = 0
+                end_char = len(input_text)
+                for i in range(len(offsets)):
+                    if offsets[i][0] <= input_text.find(target) < offsets[i][1]:
+                        start_idx = i
                         break
-                if start is not None:
-                    labels[start] = self.label2id['B-ORG']
-                    for i in range(start + 1, len(offsets)):
-                        cur_offset = offsets[i]
-                        if cur_offset[0] < (input_text.find(target) + len(target)):
-                            labels[i] = self.label2id['I-ORG']
-                        else:
-                            break
+                else:
+                    continue  # 目标词不在分词后的文本中，跳过
+
+                labels[start_idx] = self.label2id['B-ORG']
+                for j in range(start_idx + 1, len(offsets)):
+                    if offsets[j][0] < input_text.find(target) + len(target):
+                        labels[j] = self.label2id['I-ORG']
+                    else:
+                        break
 
             return {
                 'input_ids': encoding['input_ids'].squeeze(),
@@ -100,6 +134,7 @@ def load_topic_data(file_path):
     topic_dict = {item['topicId']: item for item in data}
     return topic_dict
 
+
 # 主函数
 if __name__ == '__main__':
     # 加载数据
@@ -113,7 +148,7 @@ if __name__ == '__main__':
     train_data, test_data = train_test_split(filtered_data, test_size=test_size, random_state=42)
 
     # 初始化tokenizer
-    tokenizer = BertTokenizer.from_pretrained(model_path)
+    tokenizer = BertTokenizerFast.from_pretrained(model_path, use_fast=True)
 
     # 创建数据集
     train_dataset = SarcasmTargetDataset(train_data, topic_data, tokenizer, label2id)
@@ -128,7 +163,7 @@ if __name__ == '__main__':
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
 
     # 定义模型
-    model = BertForTokenClassification.from_pretrained(model_path, num_labels=len(label2id))
+    model = MyModel(num_labels=len(label2id), dropout_prob=0.1)
     model.to(device)
 
     # 定义优化器
@@ -148,8 +183,7 @@ if __name__ == '__main__':
 
             optimizer.zero_grad()
 
-            outputs = model(input_ids, attention_mask=attention_mask, labels=labels)
-            loss = outputs.loss
+            _, loss = model(input_ids, attention_mask, labels=labels)
             loss.backward()
             optimizer.step()
 
@@ -159,22 +193,59 @@ if __name__ == '__main__':
         print(f"Epoch {epoch + 1}/{num_epochs}, Average Training Loss: {avg_train_loss:.4f}")
 
     # 测试阶段
+    # model.eval()
+    # print("Evaluating...")
+    # with torch.no_grad():
+    #     true_labels = []
+    #     pred_labels = []
+    #     for batch in test_loader:
+    #         input_ids = batch['input_ids'].to(device)
+    #         attention_mask = batch['attention_mask'].to(device)
+    #         labels = batch['labels'].to(device)
+    #
+    #         logits = model(input_ids, attention_mask)
+    #         predictions = torch.argmax(logits, dim=2)
+    #
+    #         true_labels.extend(labels.cpu().numpy())
+    #         pred_labels.extend(predictions.cpu().numpy())
+    #
+    #     # 计算准确率
+    #     accuracy = np.mean(np.array(true_labels) == np.array(pred_labels))
+    #     print(f"Test Accuracy: {accuracy * 100:.2f}%")
+
+    # 测试阶段
     model.eval()
     print("Evaluating...")
     with torch.no_grad():
         true_labels = []
         pred_labels = []
+        comment_correctness = []  # 记录每条评论是否全部正确
+
         for batch in test_loader:
             input_ids = batch['input_ids'].to(device)
             attention_mask = batch['attention_mask'].to(device)
             labels = batch['labels'].to(device)
 
-            outputs = model(input_ids, attention_mask=attention_mask)
-            predictions = torch.argmax(outputs.logits, dim=2)
+            logits = model(input_ids, attention_mask)
+            predictions = torch.argmax(logits, dim=2)
 
-            true_labels.extend(labels.cpu().numpy())
-            pred_labels.extend(predictions.cpu().numpy())
+            # 将预测结果和真实标签转换为CPU和numpy格式
+            batch_true_labels = labels.cpu().numpy()
+            batch_pred_labels = predictions.cpu().numpy()
 
-        # 计算准确率
-        accuracy = np.mean(np.array(true_labels) == np.array(pred_labels))
-        print(f"Test Accuracy: {accuracy * 100:.2f}%")
+            # 逐条评论检查是否所有token都预测正确
+            for i in range(len(batch_true_labels)):
+                is_correct = np.all(batch_true_labels[i] == batch_pred_labels[i])
+                comment_correctness.append(is_correct)
+
+            # 保存token级别的结果
+            true_labels.extend(batch_true_labels)
+            pred_labels.extend(batch_pred_labels)
+
+        # 计算token级别的准确率
+        token_accuracy = np.mean(np.array(true_labels) == np.array(pred_labels))
+        print(f"Token-level Accuracy: {token_accuracy * 100:.2f}%")
+
+        # 计算评论级别的准确率
+        comment_accuracy = np.mean(comment_correctness)
+        print(f"Comment-level Accuracy: {comment_accuracy * 100:.2f}%")
