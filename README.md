@@ -2,7 +2,7 @@
 
 代码会上传至kaggle，无需配置，可直接点击运行。
 
-[notebook链接](https://www.kaggle.com/code/jiachuyan/sarcasmdetection-chinese)
+[notebook链接（点击edit进入jupyter界面）](https://www.kaggle.com/code/jiachuyan/sarcasmdetection-chinese)
 
 ## 项目任务
 
