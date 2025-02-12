@@ -193,27 +193,6 @@ if __name__ == '__main__':
         print(f"Epoch {epoch + 1}/{num_epochs}, Average Training Loss: {avg_train_loss:.4f}")
 
     # 测试阶段
-    # model.eval()
-    # print("Evaluating...")
-    # with torch.no_grad():
-    #     true_labels = []
-    #     pred_labels = []
-    #     for batch in test_loader:
-    #         input_ids = batch['input_ids'].to(device)
-    #         attention_mask = batch['attention_mask'].to(device)
-    #         labels = batch['labels'].to(device)
-    #
-    #         logits = model(input_ids, attention_mask)
-    #         predictions = torch.argmax(logits, dim=2)
-    #
-    #         true_labels.extend(labels.cpu().numpy())
-    #         pred_labels.extend(predictions.cpu().numpy())
-    #
-    #     # 计算准确率
-    #     accuracy = np.mean(np.array(true_labels) == np.array(pred_labels))
-    #     print(f"Test Accuracy: {accuracy * 100:.2f}%")
-
-    # 测试阶段
     model.eval()
     print("Evaluating...")
     with torch.no_grad():
