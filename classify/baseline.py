@@ -16,7 +16,7 @@ train_path = '../data/train.json'
 train_topic_path = '../data/train_topic.json'
 model_path = '../bert-base-chinese'
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-print(f"Using device: {device}")
+print(f"device: {device}")
 
 # 定义封装的模型
 class MyModel(torch.nn.Module):

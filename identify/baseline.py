@@ -8,14 +8,15 @@ from sklearn.model_selection import train_test_split
 # 定义超参数
 batch_size = 16
 learning_rate = 5e-5
-num_epochs = 2
+dropout_prob = 0.1
+num_epochs = 5
 train_size = 0.9
 test_size = 0.1
 train_path = '../data/train.json'
 train_topic_path = '../data/train_topic.json'
 model_path = '../bert-base-chinese'
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-print(f"Using device: {device}")
+print(f"device: {device}")
 
 # 定义封装的模型
 class MyModel(torch.nn.Module):
@@ -163,7 +164,7 @@ if __name__ == '__main__':
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
 
     # 定义模型
-    model = MyModel(num_labels=len(label2id), dropout_prob=0.1)
+    model = MyModel(num_labels=len(label2id), dropout_prob=dropout_prob)
     model.to(device)
 
     # 定义优化器
