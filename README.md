@@ -2,7 +2,19 @@
 
 代码会上传至kaggle，无需配置，可直接点击运行。
 
-[notebook链接（点击edit进入jupyter界面）](https://www.kaggle.com/code/jiachuyan/sarcasmdetection-chinese)
+notebook链接（点击edit进入jupyter界面）:
+
+[baseline](https://www.kaggle.com/code/jiachuyan/sarcasmdetection-chinese)
+（三个baseline）
+
+[detect](https://www.kaggle.com/code/jiachuyan/sarcasm-detect)
+（讽刺识别任务）
+
+[classify](https://www.kaggle.com/code/jiachuyan/sarcasm-classify)
+（讽刺分类任务）
+
+[identify](https://www.kaggle.com/code/jiachuyan/sarcasm-identify)
+（讽刺目标识别任务）
 
 ## 项目任务
 
