@@ -9,7 +9,7 @@ from sklearn.model_selection import train_test_split
 batch_size = 16
 learning_rate = 5e-5
 dropout_prob = 0.1
-num_epochs = 2
+num_epochs = 3
 train_size = 0.9
 test_size = 0.1
 train_path = '../data/train.json'
@@ -25,7 +25,7 @@ class MyModel(torch.nn.Module):
         self.bert = BertModel.from_pretrained(model_path)
         self.fc1 = torch.nn.Linear(self.bert.config.hidden_size, 256)
         self.fc2 = torch.nn.Linear(256, 32)
-        self.fc3 = torch.nn.Linear(32, num_labels)  # 最后一层全连接层
+        self.classifier = torch.nn.Linear(32, num_labels)
         self.relu = torch.nn.ReLU()
         self.dropout = torch.nn.Dropout(dropout_prob)
 
@@ -39,6 +39,7 @@ class MyModel(torch.nn.Module):
             attention_mask=attention_mask
         )
         pooled_output = outputs.pooler_output
+
         pooled_output = self.fc1(pooled_output)
         pooled_output = self.relu(pooled_output)
         pooled_output = self.dropout(pooled_output)
@@ -47,12 +48,12 @@ class MyModel(torch.nn.Module):
         pooled_output = self.relu(pooled_output)
         pooled_output = self.dropout(pooled_output)
 
-        logits = self.fc3(pooled_output)
+        logits = self.classifier(pooled_output)
 
         # 计算损失
         if labels is not None:
             loss_fct = torch.nn.CrossEntropyLoss()
-            loss = loss_fct(logits.view(-1, self.fc3.out_features), labels.view(-1))
+            loss = loss_fct(logits.view(-1, self.classifier.out_features), labels.view(-1))
             return logits, loss
         else:
             return logits
