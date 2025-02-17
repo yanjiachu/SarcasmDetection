@@ -9,7 +9,7 @@ from sklearn.model_selection import train_test_split
 batch_size = 16
 learning_rate = 5e-5
 dropout_prob = 0.1
-num_epochs = 5
+num_epochs = 3
 train_size = 0.9
 test_size = 0.1
 train_path = '../data/train.json'
@@ -24,7 +24,10 @@ class MyModel(torch.nn.Module):
         super(MyModel, self).__init__()
         self.bert = BertModel.from_pretrained(model_path)
         self.dropout = torch.nn.Dropout(dropout_prob)
-        self.classifier = torch.nn.Linear(self.bert.config.hidden_size, num_labels)
+        self.relu = torch.nn.ReLU()
+        self.fc1 = torch.nn.Linear(self.bert.config.hidden_size, 256)
+        self.fc2 = torch.nn.Linear(256, 32)
+        self.classifier = torch.nn.Linear(32, num_labels)
 
         # 冻结 BERT 参数
         for param in self.bert.parameters():
@@ -36,7 +39,15 @@ class MyModel(torch.nn.Module):
             attention_mask=attention_mask
         )
         pooled_output = outputs.last_hidden_state
+
+        pooled_output = self.fc1(pooled_output)
+        pooled_output = self.relu(pooled_output)
         pooled_output = self.dropout(pooled_output)
+
+        pooled_output = self.fc2(pooled_output)
+        pooled_output = self.relu(pooled_output)
+        pooled_output = self.dropout(pooled_output)
+
         logits = self.classifier(pooled_output)
 
         if labels is not None:
