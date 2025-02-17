@@ -75,7 +75,7 @@ class MyModel(torch.nn.Module):
             dropout_prob
         )
         self.dropout = torch.nn.Dropout(dropout_prob)
-        self.classifier = torch.nn.Linear(770, num_labels)
+        self.classifier = torch.nn.Linear(774, num_labels)
 
         # 冻结 BERT 参数
         for param in self.bert.parameters():
@@ -105,9 +105,8 @@ class MyModel(torch.nn.Module):
         else:
             return logits
 
-
 # 定义数据集类
-class MyDataset(Dataset):
+class SarcasmClassificationDataset(Dataset):
     def __init__(self, data, topic_dict, tokenizer):
         self.data = data
         self.topic_dict = topic_dict
@@ -121,6 +120,13 @@ class MyDataset(Dataset):
         topic_id = item['topicId']
         review = item['review']
         is_sarcasm = item['isSarcasm']
+        sarcasm_type = item['sarcasmType']
+
+        # 只处理标签为1~6的讽刺文本
+        if is_sarcasm == 1 and sarcasm_type is not None:
+            label = sarcasm_type - 1  # 转换为从0开始的索引
+        else:
+            return None  # 跳过非讽刺或标签为None的样本
 
         # 获取话题内容
         topic_content = self.topic_dict.get(topic_id, {})
@@ -142,16 +148,14 @@ class MyDataset(Dataset):
         return {
             'input_ids': encoding['input_ids'].squeeze(),
             'attention_mask': encoding['attention_mask'].squeeze(),
-            'label': torch.tensor(is_sarcasm, dtype=torch.long)
+            'label': torch.tensor(label, dtype=torch.long)
         }
-
 
 # 加载评论
 def load_data_dev(file_path):
     with open(file_path, 'r', encoding='utf-8') as f:
         data = json.load(f)
     return data
-
 
 # 加载话题
 def load_topic_data(file_path):
@@ -160,29 +164,35 @@ def load_topic_data(file_path):
     topic_dict = {item['topicId']: item for item in data}
     return topic_dict
 
-
 # 主函数
 if __name__ == '__main__':
     # 加载数据
     train_data = load_data_dev(train_path)
     topic_data = load_topic_data(train_topic_path)
 
+    # 筛选出标签有效的数据
+    filtered_data = [item for item in train_data if item['isSarcasm'] == 1 and item['sarcasmType'] is not None]
+
     # 分割数据集为训练集和测试集
-    train_data, test_data = train_test_split(train_data, test_size=test_size, train_size=train_size, random_state=42)
+    train_data, test_data = train_test_split(filtered_data, test_size=test_size, random_state=42)
 
     # 初始化tokenizer
     tokenizer = BertTokenizer.from_pretrained(model_path)
 
     # 创建数据集
-    train_dataset = MyDataset(train_data, topic_data, tokenizer)
-    test_dataset = MyDataset(test_data, topic_data, tokenizer)
+    train_dataset = SarcasmClassificationDataset(train_data, topic_data, tokenizer)
+    test_dataset = SarcasmClassificationDataset(test_data, topic_data, tokenizer)
+
+    # 过滤掉无效的样本
+    train_dataset.data = [item for item in train_dataset.data if item is not None]
+    test_dataset.data = [item for item in test_dataset.data if item is not None]
 
     # 创建数据加载器
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, collate_fn=lambda x: x)
+    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, collate_fn=lambda x: x)
 
     # 定义模型
-    model = MyModel(num_labels=2, dropout_prob=dropout_prob)
+    model = MyModel(num_labels=6, dropout_prob=dropout_prob)
     model.to(device)
 
     # 定义优化器
@@ -190,19 +200,32 @@ if __name__ == '__main__':
 
     # 训练循环
     print("Training...")
-    model.train()
     for epoch in range(num_epochs):
+        model.train()  # 设置模型为训练模式
         total_loss = 0.0
 
         # 训练每一批次
         for batch in train_loader:
-            input_ids = batch['input_ids'].to(device)
-            attention_mask = batch['attention_mask'].to(device)
-            labels = batch['label'].to(device)
+            # 合并批次数据
+            input_ids = []
+            attention_masks = []
+            labels = []
+            for sample in batch:
+                if sample is not None:
+                    input_ids.append(sample['input_ids'])
+                    attention_masks.append(sample['attention_mask'])
+                    labels.append(sample['label'])
+
+            if not input_ids:
+                continue
+
+            input_ids = torch.stack(input_ids).to(device)
+            attention_masks = torch.stack(attention_masks).to(device)
+            labels = torch.stack(labels).to(device)
 
             optimizer.zero_grad()
 
-            _, loss = model(input_ids, attention_mask, labels=labels)
+            _, loss = model(input_ids, attention_masks, labels=labels)
             loss.backward()
             optimizer.step()
 
@@ -218,11 +241,23 @@ if __name__ == '__main__':
         true_labels = []
         pred_labels = []
         for batch in test_loader:
-            input_ids = batch['input_ids'].to(device)
-            attention_mask = batch['attention_mask'].to(device)
-            labels = batch['label'].to(device)
+            input_ids = []
+            attention_masks = []
+            labels = []
+            for sample in batch:
+                if sample is not None:
+                    input_ids.append(sample['input_ids'])
+                    attention_masks.append(sample['attention_mask'])
+                    labels.append(sample['label'])
 
-            logits = model(input_ids, attention_mask)
+            if not input_ids:
+                continue
+
+            input_ids = torch.stack(input_ids).to(device)
+            attention_masks = torch.stack(attention_masks).to(device)
+            labels = torch.stack(labels).to(device)
+
+            logits = model(input_ids, attention_masks)
             predictions = torch.argmax(logits, dim=1)
 
             true_labels.extend(labels.cpu().numpy())
