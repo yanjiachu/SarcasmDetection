@@ -2,7 +2,7 @@
 
 代码会上传至kaggle，无需配置，可直接点击运行。
 
-notebook链接（点击edit进入jupyter界面）:
+notebook链接:
 
 [baseline](https://www.kaggle.com/code/jiachuyan/sarcasmdetection-chinese)
 （三个baseline）
@@ -16,7 +16,7 @@ notebook链接（点击edit进入jupyter界面）:
 [identify](https://www.kaggle.com/code/jiachuyan/sarcasm-identify)
 （讽刺目标识别任务）
 
-## 项目任务
+## 项目内容
 
 ### 1. 讽刺识别：
 基于微博上下文和评论，判断目标语句是否为讽刺。
@@ -33,14 +33,14 @@ notebook链接（点击edit进入jupyter界面）:
 
 包含超过一万条微博评论，每条微博评论有相关联的原帖话题。
 
-| 字段名 | 描述      | 详细说明                                  |
-| --- |---------|---------------------------------------|
-| topicId | 评论关联的话题id | 相关话题内容存放于train_topic.json             |
-| review | 评论内容    | 清洗过的中文评论                              |
-| isSarcasm | 该评论是否为讽刺 | 1代表讽刺，0代表非讽刺                          |
-| sarcasmType | 该评论的讽刺类型 | 若isSarcasm字段为0，则该字段为null；否则1~6表示六种讽刺类型 |
-| dataId | 评论id    |                                       |
-| sarcasmTarget | 该评论的讽刺目标实体列表 | 目标实体可能有多个                             |
+| 字段名           | 描述           | 详细说明                                   |
+|---------------|--------------|----------------------------------------|
+| topicId       | 评论关联的话题id    | 相关话题内容存放于train_topic.json              |
+| review        | 评论内容         | 清洗过的中文评论                               |
+| isSarcasm     | 该评论是否为讽刺     | 1代表讽刺，0代表非讽刺                           |
+| sarcasmType   | 该评论的讽刺类型     | 若isSarcasm字段为0，则该字段为null；否则1~6表示六种讽刺类型 |
+| dataId        | 评论id         |                                        |
+| sarcasmTarget | 该评论的讽刺目标实体列表 | 目标实体可能有多个                              |
 
 示例：
 ```json
@@ -59,10 +59,10 @@ notebook链接（点击edit进入jupyter界面）:
 
 包含40个微博话题，每条都包含话题的标题和内容。
 
-| 字段名 | 描述 | 详细说明 |
-| --- | --- |------|
-| topicId | 话题id |      |
-| topicTitle | 话题标题 |      |
+| 字段名          | 描述   | 详细说明 |
+|--------------|------|------|
+| topicId      | 话题id |      |
+| topicTitle   | 话题标题 |      |
 | topicContent | 话题内容 |      |
 
 示例：
@@ -74,14 +74,36 @@ notebook链接（点击edit进入jupyter界面）:
 }
 ```
 
-## 模型代码
-三个任务的模型代码分别放在三个任务的文件夹中。
 
-### 1. 讽刺识别
+## 讽刺识别
 文件路径：../detect
 
-### 2. 讽刺类别识别
+| 文件(.py)  | 预训练模型      | 下游任务模型  | 验证准确率(%) |
+|----------|------------|---------|----------|
+| baseline | Bert冻结全部参数 | Linear  | 69.19    |
+| MLP      | Bert冻结全部参数 | MLP     | 69.32    |
+| TextCNN  | Bert冻结全部参数 | TextCNN | 78.01    |
+| GRU      | Bert冻结全部参数 | GRU     | 72.29    |
+| LSTM     | Bert冻结全部参数 | LSTM    |          |
+
+## 讽刺类别识别
 文件路径：../classify
 
-### 3. 讽刺目标识别
+| 文件(.py)  | 预训练模型      | 下游任务模型  | 验证准确率(%) |
+|----------|------------|---------|----------|
+| baseline | Bert冻结全部参数 | Linear  | 63.90    |
+| MLP      | Bert冻结全部参数 | MLP     | 63.32    |
+| TextCNN  | Bert冻结全部参数 | TextCNN | 77.96    |
+| GRU      | Bert冻结全部参数 | GRU     |          |
+| LSTM     | Bert冻结全部参数 | LSTM    |          |
+
+## 讽刺目标识别
 文件路径：../identify
+
+| 文件(.py)  | 预训练模型      | 下游任务模型  | 验证准确率(%) |
+|----------|------------|---------|----------|
+| baseline | Bert冻结全部参数 | Linear  | 17.51    |
+| MLP      | Bert冻结全部参数 | MLP     | 28.88    |
+| TextCNN  | Bert冻结全部参数 | TextCNN | 38.40    |
+| GRU      | Bert冻结全部参数 | GRU     |          |
+| LSTM     | Bert冻结全部参数 | LSTM    |          |

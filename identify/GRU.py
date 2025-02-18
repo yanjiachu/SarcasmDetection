@@ -9,7 +9,7 @@ from sklearn.model_selection import train_test_split
 batch_size = 16
 learning_rate = 5e-5
 dropout_prob = 0.1
-num_epochs = 2
+num_epochs = 3
 train_size = 0.9
 test_size = 0.1
 train_path = '../data/train.json'
@@ -18,7 +18,7 @@ model_path = '../bert-base-chinese'
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(f"device: {device}")
 
-
+# 定义封装的模型
 class MyModel(torch.nn.Module):
     def __init__(self, num_labels, dropout_prob, hidden_size=768):
         super(MyModel, self).__init__()
@@ -46,7 +46,7 @@ class MyModel(torch.nn.Module):
         if labels is not None:
             loss_fct = torch.nn.CrossEntropyLoss()
             # 计算损失时，只考虑非填充部分的有效 token
-            active_loss = attention_mask.view(-1) == 1  # 只计算有效 token 的损失
+            active_loss = attention_mask.view(-1) == 1
             active_logits = logits.view(-1, self.classifier.out_features)[active_loss]
             active_labels = labels.view(-1)[active_loss]
             loss = loss_fct(active_logits, active_labels)
@@ -92,7 +92,7 @@ class SarcasmTargetDataset(Dataset):
                 padding='max_length',
                 max_length=256,
                 truncation=True,
-                return_offsets_mapping=True,  # 获取子词映射
+                return_offsets_mapping=True,
                 return_tensors='pt'
             )
 
@@ -105,8 +105,6 @@ class SarcasmTargetDataset(Dataset):
 
                 # 假设target是一个词，并且在分词后的offsets中
                 # 这里需要根据实际情况匹配目标词的位置
-                start_char = 0
-                end_char = len(input_text)
                 for i in range(len(offsets)):
                     if offsets[i][0] <= input_text.find(target) < offsets[i][1]:
                         start_idx = i
