@@ -94,7 +94,7 @@ notebook链接:
 | baseline | Bert冻结全部参数 | Linear  | 63.90    |
 | MLP      | Bert冻结全部参数 | MLP     | 63.32    |
 | TextCNN  | Bert冻结全部参数 | TextCNN | 77.96    |
-| GRU      | Bert冻结全部参数 | GRU     |          |
+| GRU      | Bert冻结全部参数 | GRU     | 69.52    |
 | LSTM     | Bert冻结全部参数 | LSTM    |          |
 
 ## 讽刺目标识别
@@ -105,5 +105,5 @@ notebook链接:
 | baseline | Bert冻结全部参数 | Linear  | 17.51    |
 | MLP      | Bert冻结全部参数 | MLP     | 28.88    |
 | TextCNN  | Bert冻结全部参数 | TextCNN | 38.40    |
-| GRU      | Bert冻结全部参数 | GRU     |          |
+| GRU      | Bert冻结全部参数 | GRU     | 41.60    |
 | LSTM     | Bert冻结全部参数 | LSTM    |          |
