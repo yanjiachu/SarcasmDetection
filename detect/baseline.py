@@ -26,9 +26,23 @@ class MyModel(torch.nn.Module):
         self.dropout = torch.nn.Dropout(dropout_prob)
         self.classifier = torch.nn.Linear(self.bert.config.hidden_size, num_labels)
 
-        # 冻结 BERT 参数
-        for param in self.bert.parameters():
-            param.requires_grad = False
+        # 冻结 BERT 参数，除了最后1层
+        # for name, param in self.bert.named_parameters():
+        #     if 'encoder.layer.11' in name:
+        #         param.requires_grad = True
+        #     else:
+        #         param.requires_grad = False
+
+        # 冻结 BERT 参数，除了最后2层
+        for name, param in self.bert.named_parameters():
+            if 'encoder.layer.11' in name or 'encoder.layer.10' in name:
+                param.requires_grad = True
+            else:
+                param.requires_grad = False
+
+        # 冻结 BERT 所有参数
+        # for param in self.bert.parameters():
+        #     param.requires_grad = False
 
     def forward(self, input_ids, attention_mask, labels=None):
         outputs = self.bert(

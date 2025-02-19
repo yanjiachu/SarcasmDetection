@@ -9,7 +9,7 @@ from sklearn.model_selection import train_test_split
 batch_size = 16
 learning_rate = 5e-5
 dropout_prob = 0.1
-num_epochs = 3
+num_epochs = 8
 train_size = 0.9
 test_size = 0.1
 train_path = '../data/train.json'
@@ -77,9 +77,16 @@ class MyModel(torch.nn.Module):
         self.dropout = torch.nn.Dropout(dropout_prob)
         self.classifier = torch.nn.Linear(770, num_labels)
 
+        # 冻结 BERT 参数，除了最后1层
+        for name, param in self.bert.named_parameters():
+            if 'encoder.layer.11' in name:
+                param.requires_grad = True
+            else:
+                param.requires_grad = False
+
         # 冻结 BERT 参数
-        for param in self.bert.parameters():
-            param.requires_grad = False
+        # for param in self.bert.parameters():
+        #     param.requires_grad = False
 
     def forward(self, input_ids, attention_mask, labels=None):
         outputs = self.bert(
