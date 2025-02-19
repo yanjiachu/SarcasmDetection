@@ -1,0 +1,21 @@
+Epoch 1/20, Average Training Loss: 1.1082, Test Accuracy: 63.26%
+Epoch 2/20, Average Training Loss: 1.0670, Test Accuracy: 63.26%
+Epoch 3/20, Average Training Loss: 1.0490, Test Accuracy: 63.26%
+Epoch 4/20, Average Training Loss: 1.0369, Test Accuracy: 63.32%
+Epoch 5/20, Average Training Loss: 1.0268, Test Accuracy: 63.39%
+Epoch 6/20, Average Training Loss: 1.0215, Test Accuracy: 63.45%
+Epoch 7/20, Average Training Loss: 1.0125, Test Accuracy: 63.58%
+Epoch 8/20, Average Training Loss: 1.0080, Test Accuracy: 63.96%
+Epoch 9/20, Average Training Loss: 1.0027, Test Accuracy: 63.71%
+Epoch 10/20, Average Training Loss: 0.9992, Test Accuracy: 63.71%
+Epoch 11/20, Average Training Loss: 0.9930, Test Accuracy: 63.90%
+Epoch 12/20, Average Training Loss: 0.9913, Test Accuracy: 63.71%
+Epoch 13/20, Average Training Loss: 0.9896, Test Accuracy: 64.15%
+Epoch 14/20, Average Training Loss: 0.9836, Test Accuracy: 64.73%
+Epoch 15/20, Average Training Loss: 0.9841, Test Accuracy: 63.90%
+Epoch 16/20, Average Training Loss: 0.9819, Test Accuracy: 64.28%
+Epoch 17/20, Average Training Loss: 0.9778, Test Accuracy: 64.41%
+Epoch 18/20, Average Training Loss: 0.9739, Test Accuracy: 64.22%
+Epoch 19/20, Average Training Loss: 0.9768, Test Accuracy: 64.79%
+Epoch 20/20, Average Training Loss: 0.9720, Test Accuracy: 64.79%
+Total training time: 2130.74 seconds

@@ -1,6 +1,8 @@
 import json
 import torch
+import time
 import numpy as np
+import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader, Dataset
 from transformers import BertTokenizer, BertModel
 from sklearn.model_selection import train_test_split
@@ -9,7 +11,7 @@ from sklearn.model_selection import train_test_split
 batch_size = 16
 learning_rate = 5e-5
 dropout_prob = 0.1
-num_epochs = 3
+num_epochs = 20
 train_size = 0.9
 test_size = 0.1
 train_path = '../data/train.json'
@@ -139,8 +141,13 @@ if __name__ == '__main__':
     # 定义优化器
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
 
+    # 记录每个epoch的训练损失和测试精度
+    train_losses = []
+    test_accuracies = []
+
     # 训练循环
     print("Training...")
+    start_time = time.time()
     for epoch in range(num_epochs):
         model.train()  # 设置模型为训练模式
         total_loss = 0.0
@@ -173,37 +180,63 @@ if __name__ == '__main__':
             total_loss += loss.item()
 
         avg_train_loss = total_loss / len(train_loader)
-        print(f"Epoch {epoch + 1}/{num_epochs}, Average Training Loss: {avg_train_loss:.4f}")
+        train_losses.append(avg_train_loss)
 
-    # 测试阶段
-    model.eval()
-    print("Evaluating...")
-    with torch.no_grad():
-        true_labels = []
-        pred_labels = []
-        for batch in test_loader:
-            input_ids = []
-            attention_masks = []
-            labels = []
-            for sample in batch:
-                if sample is not None:
-                    input_ids.append(sample['input_ids'])
-                    attention_masks.append(sample['attention_mask'])
-                    labels.append(sample['label'])
+        # 测试阶段
+        model.eval()
+        with torch.no_grad():
+            true_labels = []
+            pred_labels = []
+            for batch in test_loader:
+                input_ids = []
+                attention_masks = []
+                labels = []
+                for sample in batch:
+                    if sample is not None:
+                        input_ids.append(sample['input_ids'])
+                        attention_masks.append(sample['attention_mask'])
+                        labels.append(sample['label'])
 
-            if not input_ids:
-                continue
+                if not input_ids:
+                    continue
 
-            input_ids = torch.stack(input_ids).to(device)
-            attention_masks = torch.stack(attention_masks).to(device)
-            labels = torch.stack(labels).to(device)
+                input_ids = torch.stack(input_ids).to(device)
+                attention_masks = torch.stack(attention_masks).to(device)
+                labels = torch.stack(labels).to(device)
 
-            logits = model(input_ids, attention_masks)
-            predictions = torch.argmax(logits, dim=1)
+                logits = model(input_ids, attention_masks)
+                predictions = torch.argmax(logits, dim=1)
 
-            true_labels.extend(labels.cpu().numpy())
-            pred_labels.extend(predictions.cpu().numpy())
+                true_labels.extend(labels.cpu().numpy())
+                pred_labels.extend(predictions.cpu().numpy())
 
         # 计算准确率
         accuracy = np.mean(np.array(true_labels) == np.array(pred_labels))
-        print(f"Test Accuracy: {accuracy * 100:.2f}%")
+        test_accuracies.append(accuracy)
+        print(f"Epoch {epoch + 1}/{num_epochs}, Average Training Loss: {avg_train_loss:.4f}, Test Accuracy: {accuracy * 100:.2f}%")
+
+    end_time = time.time()
+    total_training_time = end_time - start_time
+    print(f"Total training time: {total_training_time:.2f} seconds")
+
+    # 绘制训练损失和测试精度曲线
+    epochs = range(1, num_epochs + 1)
+    plt.figure(figsize=(12, 4))
+
+    plt.subplot(1, 2, 1)
+    plt.plot(epochs, train_losses, 'b', label='Training Loss')
+    plt.title('Training Loss vs. Epochs')
+    plt.xlabel('Epochs')
+    plt.ylabel('Loss')
+    plt.legend()
+
+    plt.subplot(1, 2, 2)
+    plt.plot(epochs, test_accuracies, 'r', label='Test Accuracy')
+    plt.title('Test Accuracy vs. Epochs')
+    plt.xlabel('Epochs')
+    plt.ylabel('Accuracy')
+    plt.legend()
+
+    plt.tight_layout()
+    plt.savefig('../training_curves/2_null_Linear_20.png')#
+    plt.show()

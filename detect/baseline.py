@@ -216,4 +216,3 @@ if __name__ == '__main__':
     plt.tight_layout()
     plt.savefig('../training_curves/1_11_Linear_20.png')
     plt.show()
-
