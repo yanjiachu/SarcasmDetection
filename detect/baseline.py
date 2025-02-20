@@ -250,7 +250,7 @@ if __name__ == '__main__':
               f"Test Loss: {avg_test_loss:.4f}, "
               f"Test Acc: {test_accuracy * 100:.2f}%")
         # 写入日志
-        with open(f'../logs/detect/1_none_Linear_{epoch}.txt', 'a') as f:
+        with open(f'../logs/detect/1_none_Linear_{num_epochs}.txt', 'a') as f:
             f.write(f"Epoch {epoch}/{num_epochs}, "
                     f"Train Loss: {avg_train_loss:.4f}, "
                     f"Train Acc: {train_accuracy * 100:.2f}%, "

@@ -4,14 +4,16 @@ import time
 import numpy as np
 import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader, Dataset
-from transformers import BertTokenizer, BertModel
+from transformers import BertTokenizerFast, BertModel
 from sklearn.model_selection import train_test_split
 
 # 定义超参数
 batch_size = 16
 learning_rate = 5e-5
 dropout_prob = 0.1
-num_epochs = 20
+patience_num = 6    # 早停阈值
+draw_step = 3       # 绘制loss和acc的图像的间隔，建议与早停机制配合
+num_epochs = 30
 train_size = 0.9
 test_size = 0.1
 train_path = '../data/train.json'
@@ -107,6 +109,29 @@ def load_topic_data(file_path):
     topic_dict = {item['topicId']: item for item in data}
     return topic_dict
 
+def plot_loss_acc(train_losses, test_losses, train_accuracies, test_accuracies, epoch, path):
+    epochs = range(1, epoch + 1)
+    plt.figure(figsize=(12, 4))
+
+    plt.subplot(1, 2, 1)
+    plt.plot(epochs, train_losses, 'b', label='Training Loss')
+    plt.plot(epochs, test_losses, 'r', label='Test Loss')
+    plt.title('Training Loss vs. Epochs')
+    plt.xlabel('Epochs')
+    plt.ylabel('Loss')
+    plt.legend()
+
+    plt.subplot(1, 2, 2)
+    plt.plot(epochs, train_accuracies, 'b', label='Train Accuracy')
+    plt.plot(epochs, test_accuracies, 'r', label='Test Accuracy')
+    plt.title('Test Accuracy vs. Epochs')
+    plt.xlabel('Epochs')
+    plt.ylabel('Accuracy')
+    plt.legend()
+
+    plt.tight_layout()
+    plt.savefig(path)
+
 # 主函数
 if __name__ == '__main__':
     # 加载数据
@@ -120,7 +145,7 @@ if __name__ == '__main__':
     train_data, test_data = train_test_split(filtered_data, test_size=test_size, random_state=42)
 
     # 初始化tokenizer
-    tokenizer = BertTokenizer.from_pretrained(model_path)
+    tokenizer = BertTokenizerFast.from_pretrained(model_path)
 
     # 创建数据集
     train_dataset = SarcasmClassificationDataset(train_data, topic_data, tokenizer)
@@ -141,16 +166,24 @@ if __name__ == '__main__':
     # 定义优化器
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
 
-    # 记录每个epoch的训练损失和测试精度
+    # 初始化列表
     train_losses = []
-    test_accuracies = []
+    test_losses = []
+    train_accuracies = []  # 训练集评论级别准确率
+    test_accuracies = []   # 测试集评论级别准确率
+
+    # 早停机制
+    patience = patience_num
+    best_accuracy = 0.0
 
     # 训练循环
     print("Training...")
     start_time = time.time()
-    for epoch in range(num_epochs):
+    for epoch in range(1, num_epochs + 1):
         model.train()  # 设置模型为训练模式
         total_loss = 0.0
+        total_correct = 0  # 统计训练集正确预测数
+        total_samples = 0  # 统计训练集总样本数
 
         # 训练每一批次
         for batch in train_loader:
@@ -173,20 +206,31 @@ if __name__ == '__main__':
 
             optimizer.zero_grad()
 
-            _, loss = model(input_ids, attention_masks, labels=labels)
+            # 获取 logits 和 loss
+            logits, loss = model(input_ids, attention_masks, labels=labels)
             loss.backward()
             optimizer.step()
 
             total_loss += loss.item()
 
+            # 计算训练集评论级别准确率
+            predictions = torch.argmax(logits, dim=1)
+            total_correct += (predictions == labels).sum().item()
+            total_samples += labels.size(0)
+
+        # 计算并保存训练集损失和准确率
         avg_train_loss = total_loss / len(train_loader)
         train_losses.append(avg_train_loss)
+        train_accuracy = total_correct / total_samples
+        train_accuracies.append(train_accuracy)
 
         # 测试阶段
         model.eval()
+        true_labels = []
+        pred_labels = []
+        total_test_loss = 0.0  # 统计测试集损失
+
         with torch.no_grad():
-            true_labels = []
-            pred_labels = []
             for batch in test_loader:
                 input_ids = []
                 attention_masks = []
@@ -204,39 +248,57 @@ if __name__ == '__main__':
                 attention_masks = torch.stack(attention_masks).to(device)
                 labels = torch.stack(labels).to(device)
 
-                logits = model(input_ids, attention_masks)
+                # 获取 logits 和 loss
+                logits, test_loss = model(input_ids, attention_masks, labels=labels)
                 predictions = torch.argmax(logits, dim=1)
 
+                # 累加测试集损失
+                total_test_loss += test_loss.item()
+
+                # 保存真实标签和预测标签
                 true_labels.extend(labels.cpu().numpy())
                 pred_labels.extend(predictions.cpu().numpy())
 
-        # 计算准确率
-        accuracy = np.mean(np.array(true_labels) == np.array(pred_labels))
-        test_accuracies.append(accuracy)
-        print(f"Epoch {epoch + 1}/{num_epochs}, Average Training Loss: {avg_train_loss:.4f}, Test Accuracy: {accuracy * 100:.2f}%")
+        # 计算测试集损失和准确率
+        avg_test_loss = total_test_loss / len(test_loader)
+        test_losses.append(avg_test_loss)
+        test_accuracy = np.mean(np.array(true_labels) == np.array(pred_labels))
+        test_accuracies.append(test_accuracy)
+
+        # 打印结果
+        print(f"Epoch {epoch}/{num_epochs}, "
+              f"Train Loss: {avg_train_loss:.4f}, "
+              f"Train Acc: {train_accuracy * 100:.2f}%, "
+              f"Test Loss: {avg_test_loss:.4f}, "
+              f"Test Acc: {test_accuracy * 100:.2f}%")
+        # 写入日志
+        with open(f"../logs/classify/2_none_Linear_{num_epochs}.txt", "a") as f:
+            f.write(f"Epoch {epoch}/{num_epochs}, "
+                    f"Train Loss: {avg_train_loss:.4f}, "
+                    f"Train Acc: {train_accuracy * 100:.2f}%, "
+                    f"Test Loss: {avg_test_loss:.4f}, "
+                    f"Test Acc: {test_accuracy * 100:.2f}%\n")
+
+        # 阶段输出图像
+        if epoch % draw_step == 0:
+            plot_loss_acc(train_losses, test_losses, train_accuracies, test_accuracies, epoch,
+                path=f'../training_curves/classify/2_none_Linear_{epoch}.png'
+            )
+
+        # 早停机制
+        if test_accuracy > best_accuracy:
+            patience = patience_num
+            best_accuracy = test_accuracy
+        else:
+            patience -= 1
+            if patience == 0:
+                print("Early stopping!")
+                with open(f"../logs/classify/2_none_Linear_{num_epochs}.txt", "a") as f:
+                    f.write("Early stopping!\n")
+                break
 
     end_time = time.time()
     total_training_time = end_time - start_time
     print(f"Total training time: {total_training_time:.2f} seconds")
-
-    # 绘制训练损失和测试精度曲线
-    epochs = range(1, num_epochs + 1)
-    plt.figure(figsize=(12, 4))
-
-    plt.subplot(1, 2, 1)
-    plt.plot(epochs, train_losses, 'b', label='Training Loss')
-    plt.title('Training Loss vs. Epochs')
-    plt.xlabel('Epochs')
-    plt.ylabel('Loss')
-    plt.legend()
-
-    plt.subplot(1, 2, 2)
-    plt.plot(epochs, test_accuracies, 'r', label='Test Accuracy')
-    plt.title('Test Accuracy vs. Epochs')
-    plt.xlabel('Epochs')
-    plt.ylabel('Accuracy')
-    plt.legend()
-
-    plt.tight_layout()
-    plt.savefig('../training_curves/2_null_Linear_20.png')#
-    plt.show()
+    with open(f"../logs/classify/2_none_Linear_{num_epochs}.txt", "a") as f:
+        f.write(f"Total training time: {total_training_time:.2f} seconds\n")
