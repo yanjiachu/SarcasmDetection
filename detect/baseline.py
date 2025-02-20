@@ -213,8 +213,8 @@ if __name__ == '__main__':
         train_losses.append(avg_train_loss)
 
         # 计算训练准确率
-        train_acc = train_total_correct / train_total_samples
-        train_accuracies.append(train_acc)
+        train_accuracy = train_total_correct / train_total_samples
+        train_accuracies.append(train_accuracy)
 
         # 测试阶段
         model.eval()
@@ -241,26 +241,42 @@ if __name__ == '__main__':
         avg_test_loss = total_test_loss / len(test_loader)
         test_losses.append(avg_test_loss)
 
-        accuracy = np.mean(np.array(true_labels) == np.array(pred_labels))
-        test_accuracies.append(accuracy)
+        test_accuracy = np.mean(np.array(true_labels) == np.array(pred_labels))
+        test_accuracies.append(test_accuracy)
 
-        print(
-            f"Epoch {epoch}/{num_epochs}, Train Loss: {avg_train_loss:.4f}, Train Accuracy: {train_acc * 100:.2f}%, Test Loss: {avg_test_loss:.4f}, Test Accuracy: {accuracy * 100:.2f}%")
+        print(f"Epoch {epoch}/{num_epochs}, "
+              f"Train Loss: {avg_train_loss:.4f}, "
+              f"Train Acc: {train_accuracy * 100:.2f}%, "
+              f"Test Loss: {avg_test_loss:.4f}, "
+              f"Test Acc: {test_accuracy * 100:.2f}%")
+        # 写入日志
+        with open(f'../logs/detect/1_none_Linear_{epoch}.txt', 'a') as f:
+            f.write(f"Epoch {epoch}/{num_epochs}, "
+                    f"Train Loss: {avg_train_loss:.4f}, "
+                    f"Train Acc: {train_accuracy * 100:.2f}%, "
+                    f"Test Loss: {avg_test_loss:.4f}, "
+                    f"Test Acc: {test_accuracy * 100:.2f}%\n")
 
         # 阶段输出图像
         if epoch % draw_step == 0:
-            plot_loss_acc(train_losses, test_losses, train_accuracies, test_accuracies, epoch, path=f'../training_curves/detect/1_11_Linear_{epoch}.png')
+            plot_loss_acc(train_losses, test_losses, train_accuracies, test_accuracies, epoch,
+                path=f'../training_curves/detect/1_none_Linear_{epoch}.png'
+            )
 
         # 早停机制
-        if accuracy > best_accuracy:
+        if test_accuracy > best_accuracy:
             patience = patience_num
-            best_accuracy = accuracy
+            best_accuracy = test_accuracy
         else:
             patience -= 1
             if patience == 0:
                 print("Early stopping!")
+                with open(f'../logs/detect/1_none_Linear_{num_epochs}.txt', 'a') as f:
+                    f.write("Early stopping!\n")
                 break
 
     end_time = time.time()
     total_training_time = end_time - start_time
     print(f"Total training time: {total_training_time:.2f} seconds")
+    with open(f'../logs/detect/1_none_Linear_{num_epochs}.txt', 'a') as f:
+        f.write(f"Total training time: {total_training_time:.2f} seconds\n")
