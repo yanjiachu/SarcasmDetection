@@ -11,7 +11,7 @@ from sklearn.model_selection import train_test_split
 batch_size = 16
 learning_rate = 5e-5
 dropout_prob = 0.1
-num_epochs = 5
+num_epochs = 20
 train_size = 0.9
 test_size = 0.1
 train_path = '../data/train.json'
@@ -29,15 +29,15 @@ class MyModel(torch.nn.Module):
         self.classifier = torch.nn.Linear(self.bert.config.hidden_size, num_labels)
 
         # 冻结 BERT 参数，除了最后1层
-        # for name, param in self.bert.named_parameters():
-        #     if 'encoder.layer.11' in name:
-        #         param.requires_grad = True
-        #     else:
-        #         param.requires_grad = False
+        for name, param in self.bert.named_parameters():
+            if 'encoder.layer.11' in name:
+                param.requires_grad = True
+            else:
+                param.requires_grad = False
 
         # 冻结 BERT 参数
-        for param in self.bert.parameters():
-            param.requires_grad = False
+        # for param in self.bert.parameters():
+        #     param.requires_grad = False
 
     def forward(self, input_ids, attention_mask, labels=None):
         outputs = self.bert(
@@ -266,5 +266,5 @@ if __name__ == '__main__':
     plt.legend()
 
     plt.tight_layout()
-    plt.savefig('../training_curves/3_null_Linear_20.png')  #
+    plt.savefig('../training_curves/3_11_Linear_20.png')
     plt.show()

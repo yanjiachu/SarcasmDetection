@@ -1,0 +1,21 @@
+Epoch 1/20, Average Training Loss: 0.0415, Token-level Accuracy: 99.12%, Comment-level Accuracy: 27.80%
+Epoch 2/20, Average Training Loss: 0.0274, Token-level Accuracy: 99.16%, Comment-level Accuracy: 32.84%
+Epoch 3/20, Average Training Loss: 0.0255, Token-level Accuracy: 99.18%, Comment-level Accuracy: 34.12%
+Epoch 4/20, Average Training Loss: 0.0241, Token-level Accuracy: 99.20%, Comment-level Accuracy: 36.23%
+Epoch 5/20, Average Training Loss: 0.0229, Token-level Accuracy: 99.20%, Comment-level Accuracy: 38.21%
+Epoch 6/20, Average Training Loss: 0.0217, Token-level Accuracy: 99.18%, Comment-level Accuracy: 38.47%
+Epoch 7/20, Average Training Loss: 0.0206, Token-level Accuracy: 99.22%, Comment-level Accuracy: 39.81%
+Epoch 8/20, Average Training Loss: 0.0197, Token-level Accuracy: 99.22%, Comment-level Accuracy: 40.32%
+Epoch 9/20, Average Training Loss: 0.0188, Token-level Accuracy: 99.20%, Comment-level Accuracy: 40.58%
+Epoch 10/20, Average Training Loss: 0.0179, Token-level Accuracy: 99.22%, Comment-level Accuracy: 41.66%
+Epoch 11/20, Average Training Loss: 0.0169, Token-level Accuracy: 99.19%, Comment-level Accuracy: 40.26%
+Epoch 12/20, Average Training Loss: 0.0161, Token-level Accuracy: 99.18%, Comment-level Accuracy: 39.49%
+Epoch 13/20, Average Training Loss: 0.0154, Token-level Accuracy: 99.21%, Comment-level Accuracy: 40.96%
+Epoch 14/20, Average Training Loss: 0.0146, Token-level Accuracy: 99.20%, Comment-level Accuracy: 41.21%
+Epoch 15/20, Average Training Loss: 0.0139, Token-level Accuracy: 99.17%, Comment-level Accuracy: 40.38%
+Epoch 16/20, Average Training Loss: 0.0131, Token-level Accuracy: 99.18%, Comment-level Accuracy: 41.60%
+Epoch 17/20, Average Training Loss: 0.0124, Token-level Accuracy: 99.20%, Comment-level Accuracy: 41.60%
+Epoch 18/20, Average Training Loss: 0.0118, Token-level Accuracy: 99.19%, Comment-level Accuracy: 41.47%
+Epoch 19/20, Average Training Loss: 0.0112, Token-level Accuracy: 99.23%, Comment-level Accuracy: 42.04%
+Epoch 20/20, Average Training Loss: 0.0107, Token-level Accuracy: 99.21%, Comment-level Accuracy: 41.60%
+Total training time: 2351.52 seconds

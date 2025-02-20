@@ -1,6 +1,8 @@
 import json
 import torch
+import time
 import numpy as np
+import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader, Dataset
 from transformers import BertTokenizerFast, BertModel
 from sklearn.model_selection import train_test_split
@@ -9,7 +11,7 @@ from sklearn.model_selection import train_test_split
 batch_size = 16
 learning_rate = 5e-5
 dropout_prob = 0.1
-num_epochs = 5
+num_epochs = 20
 train_size = 0.9
 test_size = 0.1
 train_path = '../data/train.json'
@@ -179,8 +181,12 @@ if __name__ == '__main__':
     # 定义优化器
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
 
+    train_losses=[]
+    test_accuracies=[]
+
     # 训练循环
     print("Training...")
+    start_time = time.time()
     for epoch in range(num_epochs):
         model.train()  # 设置模型为训练模式
         total_loss = 0.0
@@ -200,41 +206,67 @@ if __name__ == '__main__':
             total_loss += loss.item()
 
         avg_train_loss = total_loss / len(train_loader)
-        print(f"Epoch {epoch + 1}/{num_epochs}, Average Training Loss: {avg_train_loss:.4f}")
+        train_losses.append(avg_train_loss)
 
-    # 测试阶段
-    model.eval()
-    print("Evaluating...")
-    with torch.no_grad():
-        true_labels = []
-        pred_labels = []
-        comment_correctness = []  # 记录每条评论是否全部正确
+        # 测试阶段
+        model.eval()
+        with torch.no_grad():
+            true_labels = []
+            pred_labels = []
+            comment_correctness = []  # 记录每条评论是否全部正确
 
-        for batch in test_loader:
-            input_ids = batch['input_ids'].to(device)
-            attention_mask = batch['attention_mask'].to(device)
-            labels = batch['labels'].to(device)
+            for batch in test_loader:
+                input_ids = batch['input_ids'].to(device)
+                attention_mask = batch['attention_mask'].to(device)
+                labels = batch['labels'].to(device)
 
-            logits = model(input_ids, attention_mask)
-            predictions = torch.argmax(logits, dim=2)
+                logits = model(input_ids, attention_mask)
+                predictions = torch.argmax(logits, dim=2)
 
-            # 将预测结果和真实标签转换为CPU和numpy格式
-            batch_true_labels = labels.cpu().numpy()
-            batch_pred_labels = predictions.cpu().numpy()
+                # 将预测结果和真实标签转换为CPU和numpy格式
+                batch_true_labels = labels.cpu().numpy()
+                batch_pred_labels = predictions.cpu().numpy()
 
-            # 逐条评论检查是否所有token都预测正确
-            for i in range(len(batch_true_labels)):
-                is_correct = np.all(batch_true_labels[i] == batch_pred_labels[i])
-                comment_correctness.append(is_correct)
+                # 逐条评论检查是否所有token都预测正确
+                for i in range(len(batch_true_labels)):
+                    is_correct = np.all(batch_true_labels[i] == batch_pred_labels[i])
+                    comment_correctness.append(is_correct)
 
-            # 保存token级别的结果
-            true_labels.extend(batch_true_labels)
-            pred_labels.extend(batch_pred_labels)
+                # 保存token级别的结果
+                true_labels.extend(batch_true_labels)
+                pred_labels.extend(batch_pred_labels)
 
         # 计算token级别的准确率
         token_accuracy = np.mean(np.array(true_labels) == np.array(pred_labels))
-        print(f"Token-level Accuracy: {token_accuracy * 100:.2f}%")
 
         # 计算评论级别的准确率
         comment_accuracy = np.mean(comment_correctness)
-        print(f"Comment-level Accuracy: {comment_accuracy * 100:.2f}%")
+        test_accuracies.append(comment_accuracy)
+        print(f"Epoch {epoch + 1}/{num_epochs}, Average Training Loss: {avg_train_loss:.4f}, Token-level Accuracy: {token_accuracy * 100:.2f}%, Comment-level Accuracy: {comment_accuracy * 100:.2f}%")
+
+
+    end_time = time.time()
+    total_training_time = end_time - start_time
+    print(f"Total training time: {total_training_time:.2f} seconds")
+
+    # 绘制训练损失和测试精度曲线
+    epochs = range(1, num_epochs + 1)
+    plt.figure(figsize=(12, 4))
+
+    plt.subplot(1, 2, 1)
+    plt.plot(epochs, train_losses, 'b', label='Training Loss')
+    plt.title('Training Loss vs. Epochs')
+    plt.xlabel('Epochs')
+    plt.ylabel('Loss')
+    plt.legend()
+
+    plt.subplot(1, 2, 2)
+    plt.plot(epochs, test_accuracies, 'r', label='Test Accuracy')
+    plt.title('Test Accuracy vs. Epochs')
+    plt.xlabel('Epochs')
+    plt.ylabel('Accuracy')
+    plt.legend()
+
+    plt.tight_layout()
+    plt.savefig('../training_curves/3_null_LSTM_20.png')
+    plt.show()
