@@ -11,7 +11,9 @@ from sklearn.model_selection import train_test_split
 batch_size = 16
 learning_rate = 5e-5
 dropout_prob = 0.1
-num_epochs = 20
+patience_num = 3    # 早停阈值
+draw_step = 3       # 绘制loss和acc的图像的间隔，建议与早停机制配合
+num_epochs = 10
 train_size = 0.9
 test_size = 0.1
 train_path = '../data/train.json'
@@ -80,29 +82,29 @@ class MyModel(torch.nn.Module):
         self.classifier = torch.nn.Linear(770, num_labels)
 
         # 冻结 BERT 参数，除了最后1层
-        for name, param in self.bert.named_parameters():
-            if 'encoder.layer.11' in name:
-                param.requires_grad = True
-            else:
-                param.requires_grad = False
+        # for name, param in self.bert.named_parameters():
+        #     if 'encoder.layer.11' in name:
+        #         param.requires_grad = True
+        #     else:
+        #         param.requires_grad = False
 
         # 冻结 BERT 参数
-        # for param in self.bert.parameters():
-        #     param.requires_grad = False
+        for param in self.bert.parameters():
+            param.requires_grad = False
 
     def forward(self, input_ids, attention_mask, labels=None):
         outputs = self.bert(
             input_ids=input_ids,
             attention_mask=attention_mask
         )
-        pooled_output = outputs.pooler_output  # (batch_size, hidden_size)
+        pooled_output = outputs.pooler_output
 
         # 获取 BERT 的隐藏状态
-        hidden_states = outputs.last_hidden_state  # (batch_size, sequence_length, hidden_size)
-        cnn_features = self.cnn(hidden_states)  # (batch_size, hidden_size*3)
+        hidden_states = outputs.last_hidden_state
+        cnn_features = self.cnn(hidden_states)
 
         # 合并 BERT 的池化输出和 CNN 的特征
-        pooled_output = torch.cat((pooled_output, cnn_features), dim=1)  # (batch_size, hidden_size + 3*hidden_size)
+        pooled_output = torch.cat((pooled_output, cnn_features), dim=1)
         pooled_output = self.dropout(pooled_output)
 
         logits = self.classifier(pooled_output)
@@ -169,8 +171,29 @@ def load_topic_data(file_path):
     topic_dict = {item['topicId']: item for item in data}
     return topic_dict
 
+def plot_loss_acc(train_losses, test_losses, train_accuracies, test_accuracies, epoch, path):
+    epochs = range(1, epoch + 1)
+    plt.figure(figsize=(12, 4))
 
-# 主函数
+    plt.subplot(1, 2, 1)
+    plt.plot(epochs, train_losses, 'b', label='Training Loss')
+    plt.plot(epochs, test_losses, 'r', label='Test Loss')
+    plt.title('Training Loss vs. Epochs')
+    plt.xlabel('Epochs')
+    plt.ylabel('Loss')
+    plt.legend()
+
+    plt.subplot(1, 2, 2)
+    plt.plot(epochs, train_accuracies, 'b', label='Train Accuracy')
+    plt.plot(epochs, test_accuracies, 'r', label='Test Accuracy')
+    plt.title('Test Accuracy vs. Epochs')
+    plt.xlabel('Epochs')
+    plt.ylabel('Accuracy')
+    plt.legend()
+
+    plt.tight_layout()
+    plt.savefig(path)
+
 # 主函数
 if __name__ == '__main__':
     # 加载数据
@@ -200,15 +223,24 @@ if __name__ == '__main__':
 
     # 记录每个epoch的训练损失和测试精度
     train_losses = []
+    test_losses = []
     test_accuracies = []
+    train_accuracies = []
+
+    # 早停机制
+    patience = patience_num
+    best_accuracy = 0.0
 
     # 训练循环
     print("Training...")
     start_time = time.time()
 
-    for epoch in range(num_epochs):
+    # 训练阶段
+    for epoch in range(1, num_epochs + 1):
         model.train()
         total_loss = 0.0
+        train_total_correct = 0  # 用于计算训练准确率
+        train_total_samples = 0
 
         # 训练每一批次
         for batch in train_loader:
@@ -218,58 +250,71 @@ if __name__ == '__main__':
 
             optimizer.zero_grad()
 
-            _, loss = model(input_ids, attention_mask, labels=labels)
+            outputs = model(input_ids, attention_mask, labels=labels)
+            logits = outputs[0]
+            loss = outputs[1]
             loss.backward()
             optimizer.step()
 
             total_loss += loss.item()
 
+            # 计算训练准确率
+            train_correct = (torch.argmax(logits, dim=1) == labels).sum().item()
+            train_total_correct += train_correct
+            train_total_samples += labels.size(0)
+
         avg_train_loss = total_loss / len(train_loader)
         train_losses.append(avg_train_loss)
+
+        # 计算训练准确率
+        train_acc = train_total_correct / train_total_samples
+        train_accuracies.append(train_acc)
 
         # 测试阶段
         model.eval()
         true_labels = []
         pred_labels = []
+        total_test_loss = 0.0
+
         with torch.no_grad():
             for batch in test_loader:
                 input_ids = batch['input_ids'].to(device)
                 attention_mask = batch['attention_mask'].to(device)
                 labels = batch['label'].to(device)
 
-                logits = model(input_ids, attention_mask)
-                predictions = torch.argmax(logits, dim=1)
+                outputs = model(input_ids, attention_mask, labels=labels)
+                logits = outputs[0]
+                loss = outputs[1]
 
+                total_test_loss += loss.item()
+
+                predictions = torch.argmax(logits, dim=1)
                 true_labels.extend(labels.cpu().numpy())
                 pred_labels.extend(predictions.cpu().numpy())
+
+        avg_test_loss = total_test_loss / len(test_loader)
+        test_losses.append(avg_test_loss)
 
         accuracy = np.mean(np.array(true_labels) == np.array(pred_labels))
         test_accuracies.append(accuracy)
 
-        print(f"Epoch {epoch + 1}/{num_epochs}, Train Loss: {avg_train_loss:.4f}, Test Accuracy: {accuracy * 100:.2f}%")
+        print(
+            f"Epoch {epoch}/{num_epochs}, Train Loss: {avg_train_loss:.4f}, Train Accuracy: {train_acc * 100:.2f}%, Test Loss: {avg_test_loss:.4f}, Test Accuracy: {accuracy * 100:.2f}%")
+
+        # 阶段输出图像
+        if epoch % draw_step == 0:
+            plot_loss_acc(train_losses, test_losses, test_accuracies, train_accuracies, epoch, path=f'../training_curves/detect/1_null_TextCNN_{epoch}.png')
+
+        # 早停机制
+        if accuracy > best_accuracy:
+            patience = patience_num
+            best_accuracy = accuracy
+        else:
+            patience -= 1
+            if patience == 0:
+                print("Early stopping!")
+                break
 
     end_time = time.time()
     total_training_time = end_time - start_time
     print(f"Total training time: {total_training_time:.2f} seconds")
-
-    # 绘制训练损失和测试精度曲线
-    epochs = range(1, num_epochs + 1)
-    plt.figure(figsize=(12, 4))
-
-    plt.subplot(1, 2, 1)
-    plt.plot(epochs, train_losses, 'b', label='Training Loss')
-    plt.title('Training Loss vs. Epochs')
-    plt.xlabel('Epochs')
-    plt.ylabel('Loss')
-    plt.legend()
-
-    plt.subplot(1, 2, 2)
-    plt.plot(epochs, test_accuracies, 'r', label='Test Accuracy')
-    plt.title('Test Accuracy vs. Epochs')
-    plt.xlabel('Epochs')
-    plt.ylabel('Accuracy')
-    plt.legend()
-
-    plt.tight_layout()
-    plt.savefig('../training_curves/1_null_TextCNN_20.png')
-    plt.show()
