@@ -31,15 +31,15 @@ class MyModel(torch.nn.Module):
         self.classifier = torch.nn.Linear(self.bert.config.hidden_size, num_labels)
 
         # 冻结 BERT 参数，除了最后1层
-        for name, param in self.bert.named_parameters():
-            if 'encoder.layer.11' in name:
-                param.requires_grad = True
-            else:
-                param.requires_grad = False
+        # for name, param in self.bert.named_parameters():
+        #     if 'encoder.layer.11' in name:
+        #         param.requires_grad = True
+        #     else:
+        #         param.requires_grad = False
 
         # 冻结 BERT 参数
-        # for param in self.bert.parameters():
-        #     param.requires_grad = False
+        for param in self.bert.parameters():
+            param.requires_grad = False
 
     def forward(self, input_ids, attention_mask, labels=None):
         outputs = self.bert(
@@ -216,11 +216,11 @@ if __name__ == '__main__':
     # 训练循环
     print("Training...")
     start_time = time.time()
-    for epoch in range(1, num_epochs+1):
+    for epoch in range(1, num_epochs + 1):
         model.train()  # 设置模型为训练模式
         total_loss = 0.0
-        total_correct = 0
-        total_samples = 0
+        total_correct_comments = 0
+        total_comments = 0
 
         # 训练每一批次
         for batch in train_loader:
@@ -237,17 +237,22 @@ if __name__ == '__main__':
 
             total_loss += loss.item()
 
-            # 计算训练精度
+            # 计算评论级别的训练精度
             predictions = torch.argmax(logits, dim=2)
-            correct = (predictions == labels).sum().item()
-            total_correct += correct
-            total_samples += labels.size(0) * labels.size(1)
+            batch_true_labels = labels.cpu().numpy()
+            batch_pred_labels = predictions.cpu().numpy()
+
+            # 逐条评论检查是否所有token都预测正确
+            for i in range(len(batch_true_labels)):
+                is_correct = np.all(batch_true_labels[i] == batch_pred_labels[i])
+                total_correct_comments += int(is_correct)
+                total_comments += 1
 
         avg_train_loss = total_loss / len(train_loader)
         train_losses.append(avg_train_loss)
 
-        # 计算并保存训练精度
-        train_accuracy = total_correct / total_samples
+        # 计算并保存评论级别的训练精度
+        train_accuracy = total_correct_comments / total_comments
         train_accuracies.append(train_accuracy)
 
         # 测试阶段
@@ -283,9 +288,6 @@ if __name__ == '__main__':
                 true_labels.extend(batch_true_labels)
                 pred_labels.extend(batch_pred_labels)
 
-        # 计算token级别的准确率
-        token_accuracy = np.mean(np.array(true_labels) == np.array(pred_labels))
-
         # 计算评论级别的准确率
         comment_accuracy = np.mean(comment_correctness)
         test_accuracies.append(comment_accuracy)
@@ -299,14 +301,21 @@ if __name__ == '__main__':
               f"Train Loss: {avg_train_loss:.4f}, "
               f"Train Acc: {train_accuracy * 100:.2f}%, "
               f"Test Loss: {avg_test_loss:.4f}, "
-              f"Token-level Acc: {token_accuracy * 100:.2f}%, "
-              f"Comment-level Acc: {comment_accuracy * 100:.2f}%")
+              f"Test Acc: {comment_accuracy * 100:.2f}%")
+
+        # 写入日志
+        with open(f'../logs/identify/3_none_Linear_{num_epochs}.txt', 'a') as f:
+            f.write(f"Epoch {epoch}/{num_epochs}, "
+                    f"Train Loss: {avg_train_loss:.4f}, "
+                    f"Train Acc: {train_accuracy * 100:.2f}%, "
+                    f"Test Loss: {avg_test_loss:.4f}, "
+                    f"Test Acc: {comment_accuracy * 100:.2f}%\n")
 
         # 阶段输出图像（如果需要）
         if epoch % draw_step == 0:
             plot_loss_acc(train_losses, test_losses, train_accuracies, test_accuracies, epoch,
-                        path=f'../training_curves/identify/3_11_Linear_{epoch}.png'
-                        )
+                path=f'../training_curves/identify/3_none_Linear_{epoch}.png'
+            )
 
         # 早停机制
         if comment_accuracy > best_accuracy:
@@ -316,8 +325,12 @@ if __name__ == '__main__':
             patience -= 1
             if patience == 0:
                 print("Early stopping!")
+                with open(f'../logs/identify/3_none_Linear_{num_epochs}.txt', 'a') as f:
+                    f.write("Early stopping!\n")
                 break
 
     end_time = time.time()
     total_training_time = end_time - start_time
     print(f"Total training time: {total_training_time:.2f} seconds")
+    with open(f'../logs/identify/3_none_Linear_{num_epochs}.txt', 'a') as f:
+        f.write(f"Total training time: {total_training_time:.2f} seconds\n")
