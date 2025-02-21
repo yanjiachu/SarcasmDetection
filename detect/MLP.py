@@ -4,14 +4,14 @@ import time
 import numpy as np
 import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader, Dataset
-from transformers import BertTokenizer, BertModel
+from transformers import BertModel, BertTokenizerFast
 from sklearn.model_selection import train_test_split
 
 # 定义超参数
 batch_size = 16
 learning_rate = 5e-5
-dropout_prob = 0
-patience_num = 6    # 早停阈值
+dropout_prob = 0.02
+patience_num = 5    # 早停阈值
 draw_step = 3       # 绘制loss和acc的图像的间隔，建议与早停机制配合
 num_epochs = 30
 train_size = 0.9
@@ -161,7 +161,7 @@ if __name__ == '__main__':
     train_data, test_data = train_test_split(train_data, test_size=test_size, train_size=train_size, random_state=42)
 
     # 初始化tokenizer
-    tokenizer = BertTokenizer.from_pretrained(model_path)
+    tokenizer = BertTokenizerFast.from_pretrained(model_path)
 
     # 创建数据集
     train_dataset = MyDataset(train_data, topic_data, tokenizer)
