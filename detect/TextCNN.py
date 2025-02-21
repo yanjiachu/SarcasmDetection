@@ -10,7 +10,7 @@ from sklearn.model_selection import train_test_split
 # 定义超参数
 batch_size = 16
 learning_rate = 5e-5
-dropout_prob = 0.1
+dropout_prob = 0.05
 patience_num = 3    # 早停阈值
 draw_step = 3       # 绘制loss和acc的图像的间隔，建议与早停机制配合
 num_epochs = 10

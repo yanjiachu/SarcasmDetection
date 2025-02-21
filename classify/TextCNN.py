@@ -8,8 +8,8 @@ from sklearn.model_selection import train_test_split
 # 定义超参数
 batch_size = 16
 learning_rate = 5e-5
-dropout_prob = 0.1
-num_epochs = 3
+dropout_prob = 0.05
+num_epochs = 30
 train_size = 0.9
 test_size = 0.1
 train_path = '../data/train.json'
