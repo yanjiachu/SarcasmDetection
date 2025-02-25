@@ -31,18 +31,18 @@ class MyModel(torch.nn.Module):
         self.classifier = torch.nn.Linear(self.bert.config.hidden_size, num_labels)
 
         # 冻结 BERT 参数，除了最后1层
-        for name, param in self.bert.named_parameters():
-            if 'encoder.layer.11' in name:
-                param.requires_grad = True
-            else:
-                param.requires_grad = False
-
-        # 冻结 BERT 参数，除了最后2层
         # for name, param in self.bert.named_parameters():
-        #     if 'encoder.layer.11' in name or 'encoder.layer.10' in name:
+        #     if 'encoder.layer.11' in name:
         #         param.requires_grad = True
         #     else:
         #         param.requires_grad = False
+
+        # 冻结 BERT 参数，除了最后2层
+        for name, param in self.bert.named_parameters():
+            if 'encoder.layer.11' in name or 'encoder.layer.10' in name:
+                param.requires_grad = True
+            else:
+                param.requires_grad = False
 
         # 冻结 BERT 所有参数
         # for param in self.bert.parameters():
@@ -250,7 +250,7 @@ if __name__ == '__main__':
               f"Test Loss: {avg_test_loss:.4f}, "
               f"Test Acc: {test_accuracy * 100:.2f}%")
         # 写入日志
-        with open(f'../logs/detect/1_11_Linear_{num_epochs}.txt', 'a') as f:
+        with open(f'../logs/detect/1_10-11_Linear_{num_epochs}.txt', 'a') as f:
             f.write(f"Epoch {epoch}/{num_epochs}, "
                     f"Train Loss: {avg_train_loss:.4f}, "
                     f"Train Acc: {train_accuracy * 100:.2f}%, "
@@ -260,7 +260,7 @@ if __name__ == '__main__':
         # 阶段输出图像
         if epoch % draw_step == 0:
             plot_loss_acc(train_losses, test_losses, train_accuracies, test_accuracies, epoch,
-                path=f'../training_curves/detect/1_11_Linear_{epoch}.png'
+                path=f'../training_curves/detect/1_10-11_Linear_{epoch}.png'
             )
 
         # 早停机制
@@ -271,12 +271,12 @@ if __name__ == '__main__':
             patience -= 1
             if patience == 0:
                 print("Early stopping!")
-                with open(f'../logs/detect/1_11_Linear_{num_epochs}.txt', 'a') as f:
+                with open(f'../logs/detect/1_10-11_Linear_{num_epochs}.txt', 'a') as f:
                     f.write("Early stopping!\n")
                 break
 
     end_time = time.time()
     total_training_time = end_time - start_time
     print(f"Total training time: {total_training_time:.2f} seconds")
-    with open(f'../logs/detect/1_11_Linear_{num_epochs}.txt', 'a') as f:
+    with open(f'../logs/detect/1_10-11_Linear_{num_epochs}.txt', 'a') as f:
         f.write(f"Total training time: {total_training_time:.2f} seconds\n")
