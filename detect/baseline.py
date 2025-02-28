@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader, Dataset
 from transformers import BertModel, BertTokenizerFast
 from sklearn.model_selection import train_test_split
+from sklearn.metrics import roc_curve, auc
 
 # 定义超参数
 batch_size = 16
@@ -18,7 +19,8 @@ train_size = 0.9
 test_size = 0.1
 train_path = '../data/train.json'
 train_topic_path = '../data/train_topic.json'
-model_path = '../bert-base-chinese'
+bert_path = '../bert-base-chinese'
+best_model_path = '../models/detect/best_model.pth'
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(f"device: {device}")
 
@@ -26,23 +28,23 @@ print(f"device: {device}")
 class MyModel(torch.nn.Module):
     def __init__(self, num_labels, dropout_prob):
         super(MyModel, self).__init__()
-        self.bert = BertModel.from_pretrained(model_path)
+        self.bert = BertModel.from_pretrained(bert_path)
         self.dropout = torch.nn.Dropout(dropout_prob)
         self.classifier = torch.nn.Linear(self.bert.config.hidden_size, num_labels)
 
         # 冻结 BERT 参数，除了最后1层
-        # for name, param in self.bert.named_parameters():
-        #     if 'encoder.layer.11' in name:
-        #         param.requires_grad = True
-        #     else:
-        #         param.requires_grad = False
-
-        # 冻结 BERT 参数，除了最后2层
         for name, param in self.bert.named_parameters():
-            if 'encoder.layer.11' in name or 'encoder.layer.10' in name:
+            if 'encoder.layer.11' in name:
                 param.requires_grad = True
             else:
                 param.requires_grad = False
+
+        # 冻结 BERT 参数，除了最后2层
+        # for name, param in self.bert.named_parameters():
+        #     if 'encoder.layer.11' in name or 'encoder.layer.10' in name:
+        #         param.requires_grad = True
+        #     else:
+        #         param.requires_grad = False
 
         # 冻结 BERT 所有参数
         # for param in self.bert.parameters():
@@ -140,6 +142,20 @@ def plot_loss_acc(train_losses, test_losses, train_accuracies, test_accuracies, 
     plt.tight_layout()
     plt.savefig(path)
 
+# 绘制ROC曲线
+def plot_roc_curve(fpr, tpr, roc_auc, path):
+    plt.figure()
+    plt.plot(fpr, tpr, color='darkorange', lw=2, label=f'ROC curve (AUC = {roc_auc:.2f})')
+    plt.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--')
+    plt.xlim([0.0, 1.0])
+    plt.ylim([0.0, 1.05])
+    plt.xlabel('False Positive Rate')
+    plt.ylabel('True Positive Rate')
+    plt.title('Receiver Operating Characteristic')
+    plt.legend(loc="lower right")
+    plt.savefig(path)
+    plt.close()
+
 # 主函数
 if __name__ == '__main__':
     # 加载数据
@@ -150,7 +166,7 @@ if __name__ == '__main__':
     train_data, test_data = train_test_split(train_data, test_size=test_size, train_size=train_size, random_state=42)
 
     # 初始化tokenizer
-    tokenizer = BertTokenizerFast.from_pretrained(model_path)
+    tokenizer = BertTokenizerFast.from_pretrained(bert_path)
 
     # 创建数据集
     train_dataset = MyDataset(train_data, topic_data, tokenizer)
@@ -250,7 +266,7 @@ if __name__ == '__main__':
               f"Test Loss: {avg_test_loss:.4f}, "
               f"Test Acc: {test_accuracy * 100:.2f}%")
         # 写入日志
-        with open(f'../logs/detect/1_10-11_Linear_{num_epochs}.txt', 'a') as f:
+        with open(f'../logs/detect/1_11_Linear_{num_epochs}.txt', 'a') as f:
             f.write(f"Epoch {epoch}/{num_epochs}, "
                     f"Train Loss: {avg_train_loss:.4f}, "
                     f"Train Acc: {train_accuracy * 100:.2f}%, "
@@ -260,23 +276,54 @@ if __name__ == '__main__':
         # 阶段输出图像
         if epoch % draw_step == 0:
             plot_loss_acc(train_losses, test_losses, train_accuracies, test_accuracies, epoch,
-                path=f'../training_curves/detect/1_10-11_Linear_{epoch}.png'
+                path=f'../training_curves/detect/1_11_Linear_{epoch}.png'
             )
 
         # 早停机制
         if test_accuracy > best_accuracy:
             patience = patience_num
             best_accuracy = test_accuracy
+            torch.save(model.state_dict(), best_model_path)
         else:
             patience -= 1
             if patience == 0:
                 print("Early stopping!")
-                with open(f'../logs/detect/1_10-11_Linear_{num_epochs}.txt', 'a') as f:
+                with open(f'../logs/detect/1_11_Linear_{num_epochs}.txt', 'a') as f:
                     f.write("Early stopping!\n")
                 break
 
     end_time = time.time()
     total_training_time = end_time - start_time
     print(f"Total training time: {total_training_time:.2f} seconds")
-    with open(f'../logs/detect/1_10-11_Linear_{num_epochs}.txt', 'a') as f:
+    with open(f'../logs/detect/1_11_Linear_{num_epochs}.txt', 'a') as f:
         f.write(f"Total training time: {total_training_time:.2f} seconds\n")
+
+    # 加载最佳模型并绘制ROC曲线
+    model.load_state_dict(torch.load(best_model_path))
+    model.eval()
+
+    true_labels = []
+    pred_probs = []
+
+    with torch.no_grad():
+        for batch in test_loader:
+            input_ids = batch['input_ids'].to(device)
+            attention_mask = batch['attention_mask'].to(device)
+            labels = batch['label'].to(device)
+
+            logits = model(input_ids, attention_mask)
+            probabilities = torch.softmax(logits, dim=1)
+            pred_probs.extend(probabilities[:, 1].cpu().numpy())  # 正类概率
+            true_labels.extend(labels.cpu().numpy())
+
+    # 计算ROC和AUC
+    fpr, tpr, _ = roc_curve(true_labels, pred_probs)
+    roc_auc = auc(fpr, tpr)
+
+    # 绘制ROC曲线
+    plot_roc_curve(fpr, tpr, roc_auc, path=f'../ROC/11_Linear_roc_auc.png')
+
+    # 输出AUC值
+    print(f"AUC: {roc_auc:.4f}")
+    with open(f'../logs/detect/1_11_Linear_{num_epochs}.txt', 'a') as f:
+        f.write(f"AUC: {roc_auc:.4f}\n")

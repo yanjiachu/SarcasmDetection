@@ -1,13 +1,15 @@
-Epoch 1/30, Train Loss: 0.5534, Train Acc: 71.84%, Test Loss: 0.5071, Test Acc: 74.62%
-Epoch 2/30, Train Loss: 0.4919, Train Acc: 75.85%, Test Loss: 0.5034, Test Acc: 74.75%
-Epoch 3/30, Train Loss: 0.4670, Train Acc: 77.45%, Test Loss: 0.4816, Test Acc: 76.57%
-Epoch 4/30, Train Loss: 0.4434, Train Acc: 78.80%, Test Loss: 0.4801, Test Acc: 76.61%
-Epoch 5/30, Train Loss: 0.4124, Train Acc: 80.74%, Test Loss: 0.4668, Test Acc: 77.80%
-Epoch 6/30, Train Loss: 0.3872, Train Acc: 82.37%, Test Loss: 0.5037, Test Acc: 75.38%
-Epoch 7/30, Train Loss: 0.3584, Train Acc: 83.75%, Test Loss: 0.4973, Test Acc: 76.69%
-Epoch 8/30, Train Loss: 0.3316, Train Acc: 85.37%, Test Loss: 0.4983, Test Acc: 76.95%
-Epoch 9/30, Train Loss: 0.3045, Train Acc: 86.77%, Test Loss: 0.5240, Test Acc: 77.58%
-Epoch 10/30, Train Loss: 0.2723, Train Acc: 88.19%, Test Loss: 0.5443, Test Acc: 76.74%
-Epoch 11/30, Train Loss: 0.2527, Train Acc: 89.30%, Test Loss: 0.6138, Test Acc: 73.26%
+Epoch 1/30, Train Loss: 0.5466, Train Acc: 72.29%, Test Loss: 0.4984, Test Acc: 75.21%
+Epoch 2/30, Train Loss: 0.4901, Train Acc: 75.77%, Test Loss: 0.4820, Test Acc: 75.72%
+Epoch 3/30, Train Loss: 0.4639, Train Acc: 77.51%, Test Loss: 0.4731, Test Acc: 76.06%
+Epoch 4/30, Train Loss: 0.4349, Train Acc: 79.59%, Test Loss: 0.4708, Test Acc: 76.91%
+Epoch 5/30, Train Loss: 0.4047, Train Acc: 81.23%, Test Loss: 0.4845, Test Acc: 75.85%
+Epoch 6/30, Train Loss: 0.3779, Train Acc: 82.92%, Test Loss: 0.4936, Test Acc: 76.78%
+Epoch 7/30, Train Loss: 0.3460, Train Acc: 84.63%, Test Loss: 0.4773, Test Acc: 78.31%
+Epoch 8/30, Train Loss: 0.3155, Train Acc: 86.17%, Test Loss: 0.5081, Test Acc: 78.22%
+Epoch 9/30, Train Loss: 0.2851, Train Acc: 87.56%, Test Loss: 0.5367, Test Acc: 77.03%
+Epoch 10/30, Train Loss: 0.2554, Train Acc: 89.22%, Test Loss: 0.5473, Test Acc: 77.58%
+Epoch 11/30, Train Loss: 0.2313, Train Acc: 90.11%, Test Loss: 0.5842, Test Acc: 77.50%
+Epoch 12/30, Train Loss: 0.2095, Train Acc: 91.34%, Test Loss: 0.6463, Test Acc: 76.10%
 Early stopping!
-Total training time: 2120.11 seconds
+Total training time: 2083.60 seconds
+AUC: 0.8473
