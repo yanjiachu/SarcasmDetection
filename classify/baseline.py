@@ -6,11 +6,13 @@ import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader, Dataset
 from transformers import BertTokenizerFast, BertModel
 from sklearn.model_selection import train_test_split
+from sklearn.metrics import confusion_matrix
+import seaborn as sns
 
 # 定义超参数
 batch_size = 16
 learning_rate = 5e-5
-dropout_prob = 0.25
+dropout_prob = 0.1
 patience_num = 5    # 早停阈值
 draw_step = 3       # 绘制loss和acc的图像的间隔，建议与早停机制配合
 num_epochs = 30
@@ -303,6 +305,7 @@ if __name__ == '__main__':
         if test_accuracy > best_accuracy:
             patience = patience_num
             best_accuracy = test_accuracy
+            torch.save(model.state_dict(), '../models/classify/best_model.pth')
         else:
             patience -= 1
             if patience == 0:
@@ -316,3 +319,44 @@ if __name__ == '__main__':
     print(f"Total training time: {total_training_time:.2f} seconds")
     with open(f"../logs/classify/2_all_Linear_{num_epochs}.txt", "a") as f:
         f.write(f"Total training time: {total_training_time:.2f} seconds\n")
+
+    # 加载最佳模型
+    model.load_state_dict(torch.load('../models/classify/best_model.pth'))
+    model.eval()
+
+    # 收集测试集预测结果
+    true_labels = []
+    pred_labels = []
+
+    with torch.no_grad():
+        for batch in test_loader:
+            input_ids = []
+            attention_masks = []
+            labels = []
+            for sample in batch:
+                input_ids.append(sample['input_ids'])
+                attention_masks.append(sample['attention_mask'])
+                labels.append(sample['label'])
+
+            input_ids = torch.stack(input_ids).to(device)
+            attention_masks = torch.stack(attention_masks).to(device)
+            labels = torch.stack(labels).to(device)
+
+            logits = model(input_ids, attention_masks)
+            predictions = torch.argmax(logits, dim=1)
+
+            true_labels.extend(labels.cpu().numpy())
+            pred_labels.extend(predictions.cpu().numpy())
+
+    # 生成混淆矩阵
+    cm = confusion_matrix(true_labels, pred_labels, labels=range(6))
+
+    plt.figure(figsize=(12, 10))
+    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues',
+                xticklabels=[1, 2, 3, 4, 5, 6],
+                yticklabels=[1, 2, 3, 4, 5, 6])
+    plt.xlabel('Predicted Type')
+    plt.ylabel('True Type')
+    plt.title('ConfusionMatrix of SarcasmTypes')
+    plt.savefig('../ConfusionMatrix/2_all_Linear_30.png')
+    plt.close()
