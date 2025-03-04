@@ -1,4 +1,6 @@
 .idea/
 bert-base-chinese/
+chinese-lert-base/
+chinese-macbert-base/
 training_curves/
 models/
