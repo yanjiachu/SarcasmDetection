@@ -1,0 +1,24 @@
+Epoch 1/30, Train Loss: 0.5520, Train Acc: 71.24%, Test Loss: 0.5239, Test Acc: 74.53%
+Epoch 2/30, Train Loss: 0.5201, Train Acc: 73.56%, Test Loss: 0.5096, Test Acc: 74.75%
+Epoch 3/30, Train Loss: 0.5085, Train Acc: 74.77%, Test Loss: 0.5169, Test Acc: 74.24%
+Epoch 4/30, Train Loss: 0.5007, Train Acc: 75.14%, Test Loss: 0.4983, Test Acc: 76.36%
+Epoch 5/30, Train Loss: 0.4940, Train Acc: 75.20%, Test Loss: 0.4944, Test Acc: 76.27%
+Epoch 6/30, Train Loss: 0.4886, Train Acc: 75.86%, Test Loss: 0.4884, Test Acc: 76.02%
+Epoch 7/30, Train Loss: 0.4810, Train Acc: 76.51%, Test Loss: 0.4912, Test Acc: 75.93%
+Epoch 8/30, Train Loss: 0.4727, Train Acc: 76.90%, Test Loss: 0.4964, Test Acc: 74.28%
+Epoch 9/30, Train Loss: 0.4665, Train Acc: 77.70%, Test Loss: 0.5001, Test Acc: 74.83%
+Early stopping!
+Total training time: 2657.08 seconds
+
+AUC: 0.8010
+Recall: 0.8886
+F1 Score: 0.8342
+Classification Report:
+               precision    recall  f1-score   support
+
+Non-Sarcastic       0.69      0.51      0.59       780
+    Sarcastic       0.79      0.89      0.83      1580
+
+     accuracy                           0.76      2360
+    macro avg       0.74      0.70      0.71      2360
+ weighted avg       0.76      0.76      0.75      2360
