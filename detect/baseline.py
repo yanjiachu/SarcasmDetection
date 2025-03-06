@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader, Dataset
 from transformers import BertModel, BertTokenizerFast
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import roc_curve, auc
+from sklearn.metrics import roc_curve, auc, precision_recall_fscore_support, classification_report
 
 # 定义超参数
 batch_size = 16
@@ -20,7 +20,7 @@ test_size = 0.1
 train_path = '../data/train.json'
 train_topic_path = '../data/train_topic.json'
 bert_path = '../bert-base-chinese'
-best_model_path = '../models/detect/best_model.pth'
+best_model_path = '../models/detect/bert.pth'
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(f"device: {device}")
 
@@ -156,7 +156,8 @@ def plot_roc_curve(fpr, tpr, roc_auc, path):
     plt.ylabel('True Positive Rate')
     plt.title('Receiver Operating Characteristic')
     plt.legend(loc="lower right")
-    plt.savefig(path)
+    # plt.savefig(path)
+    plt.show()
     plt.close()
 
 # 主函数
@@ -196,110 +197,110 @@ if __name__ == '__main__':
     patience = patience_num
     best_accuracy = 0.0
 
-    # 训练循环
-    print("Training...")
-    start_time = time.time()
-
-    # 训练阶段
-    for epoch in range(1, num_epochs + 1):
-        model.train()
-        total_loss = 0.0
-        train_total_correct = 0  # 用于计算训练准确率
-        train_total_samples = 0
-
-        # 训练每一批次
-        for batch in train_loader:
-            input_ids = batch['input_ids'].to(device)
-            attention_mask = batch['attention_mask'].to(device)
-            labels = batch['label'].to(device)
-
-            optimizer.zero_grad()
-
-            outputs = model(input_ids, attention_mask, labels=labels)
-            logits = outputs[0]
-            loss = outputs[1]
-            loss.backward()
-            optimizer.step()
-
-            total_loss += loss.item()
-
-            # 计算训练准确率
-            train_correct = (torch.argmax(logits, dim=1) == labels).sum().item()
-            train_total_correct += train_correct
-            train_total_samples += labels.size(0)
-
-        avg_train_loss = total_loss / len(train_loader)
-        train_losses.append(avg_train_loss)
-
-        # 计算训练准确率
-        train_accuracy = train_total_correct / train_total_samples
-        train_accuracies.append(train_accuracy)
-
-        # 测试阶段
-        model.eval()
-        true_labels = []
-        pred_labels = []
-        total_test_loss = 0.0
-
-        with torch.no_grad():
-            for batch in test_loader:
-                input_ids = batch['input_ids'].to(device)
-                attention_mask = batch['attention_mask'].to(device)
-                labels = batch['label'].to(device)
-
-                outputs = model(input_ids, attention_mask, labels=labels)
-                logits = outputs[0]
-                loss = outputs[1]
-
-                total_test_loss += loss.item()
-
-                predictions = torch.argmax(logits, dim=1)
-                true_labels.extend(labels.cpu().numpy())
-                pred_labels.extend(predictions.cpu().numpy())
-
-        avg_test_loss = total_test_loss / len(test_loader)
-        test_losses.append(avg_test_loss)
-
-        test_accuracy = np.mean(np.array(true_labels) == np.array(pred_labels))
-        test_accuracies.append(test_accuracy)
-
-        print(f"Epoch {epoch}/{num_epochs}, "
-              f"Train Loss: {avg_train_loss:.4f}, "
-              f"Train Acc: {train_accuracy * 100:.2f}%, "
-              f"Test Loss: {avg_test_loss:.4f}, "
-              f"Test Acc: {test_accuracy * 100:.2f}%")
-        # 写入日志
-        with open(f'../logs/detect/1_all_Linear_{num_epochs}.txt', 'a') as f:
-            f.write(f"Epoch {epoch}/{num_epochs}, "
-                    f"Train Loss: {avg_train_loss:.4f}, "
-                    f"Train Acc: {train_accuracy * 100:.2f}%, "
-                    f"Test Loss: {avg_test_loss:.4f}, "
-                    f"Test Acc: {test_accuracy * 100:.2f}%\n")
-
-        # 阶段输出图像
-        if epoch % draw_step == 0:
-            plot_loss_acc(train_losses, test_losses, train_accuracies, test_accuracies, epoch,
-                path=f'../training_curves/detect/1_all_Linear_{epoch}.png'
-            )
-
-        # 早停机制
-        if test_accuracy > best_accuracy:
-            patience = patience_num
-            best_accuracy = test_accuracy
-            torch.save(model.state_dict(), best_model_path)
-        else:
-            patience -= 1
-            if patience == 0:
-                print("Early stopping!")
-                with open(f'../logs/detect/1_all_Linear_{num_epochs}.txt', 'a') as f:
-                    f.write("Early stopping!\n")
-                break
-
-    end_time = time.time()
-    total_training_time = end_time - start_time
-    print(f"Total training time: {total_training_time:.2f} seconds")
-    with open(f'../logs/detect/1_all_Linear_{num_epochs}.txt', 'a') as f:
-        f.write(f"Total training time: {total_training_time:.2f} seconds\n")
+    # # 训练循环
+    # print("Training...")
+    # start_time = time.time()
+    #
+    # # 训练阶段
+    # for epoch in range(1, num_epochs + 1):
+    #     model.train()
+    #     total_loss = 0.0
+    #     train_total_correct = 0  # 用于计算训练准确率
+    #     train_total_samples = 0
+    #
+    #     # 训练每一批次
+    #     for batch in train_loader:
+    #         input_ids = batch['input_ids'].to(device)
+    #         attention_mask = batch['attention_mask'].to(device)
+    #         labels = batch['label'].to(device)
+    #
+    #         optimizer.zero_grad()
+    #
+    #         outputs = model(input_ids, attention_mask, labels=labels)
+    #         logits = outputs[0]
+    #         loss = outputs[1]
+    #         loss.backward()
+    #         optimizer.step()
+    #
+    #         total_loss += loss.item()
+    #
+    #         # 计算训练准确率
+    #         train_correct = (torch.argmax(logits, dim=1) == labels).sum().item()
+    #         train_total_correct += train_correct
+    #         train_total_samples += labels.size(0)
+    #
+    #     avg_train_loss = total_loss / len(train_loader)
+    #     train_losses.append(avg_train_loss)
+    #
+    #     # 计算训练准确率
+    #     train_accuracy = train_total_correct / train_total_samples
+    #     train_accuracies.append(train_accuracy)
+    #
+    #     # 测试阶段
+    #     model.eval()
+    #     true_labels = []
+    #     pred_labels = []
+    #     total_test_loss = 0.0
+    #
+    #     with torch.no_grad():
+    #         for batch in test_loader:
+    #             input_ids = batch['input_ids'].to(device)
+    #             attention_mask = batch['attention_mask'].to(device)
+    #             labels = batch['label'].to(device)
+    #
+    #             outputs = model(input_ids, attention_mask, labels=labels)
+    #             logits = outputs[0]
+    #             loss = outputs[1]
+    #
+    #             total_test_loss += loss.item()
+    #
+    #             predictions = torch.argmax(logits, dim=1)
+    #             true_labels.extend(labels.cpu().numpy())
+    #             pred_labels.extend(predictions.cpu().numpy())
+    #
+    #     avg_test_loss = total_test_loss / len(test_loader)
+    #     test_losses.append(avg_test_loss)
+    #
+    #     test_accuracy = np.mean(np.array(true_labels) == np.array(pred_labels))
+    #     test_accuracies.append(test_accuracy)
+    #
+    #     print(f"Epoch {epoch}/{num_epochs}, "
+    #           f"Train Loss: {avg_train_loss:.4f}, "
+    #           f"Train Acc: {train_accuracy * 100:.2f}%, "
+    #           f"Test Loss: {avg_test_loss:.4f}, "
+    #           f"Test Acc: {test_accuracy * 100:.2f}%")
+    #     # 写入日志
+    #     with open(f'../logs/detect/1_all_Linear_{num_epochs}.txt', 'a') as f:
+    #         f.write(f"Epoch {epoch}/{num_epochs}, "
+    #                 f"Train Loss: {avg_train_loss:.4f}, "
+    #                 f"Train Acc: {train_accuracy * 100:.2f}%, "
+    #                 f"Test Loss: {avg_test_loss:.4f}, "
+    #                 f"Test Acc: {test_accuracy * 100:.2f}%\n")
+    #
+    #     # 阶段输出图像
+    #     if epoch % draw_step == 0:
+    #         plot_loss_acc(train_losses, test_losses, train_accuracies, test_accuracies, epoch,
+    #             path=f'../training_curves/detect/1_all_Linear_{epoch}.png'
+    #         )
+    #
+    #     # 早停机制
+    #     if test_accuracy > best_accuracy:
+    #         patience = patience_num
+    #         best_accuracy = test_accuracy
+    #         torch.save(model.state_dict(), best_model_path)
+    #     else:
+    #         patience -= 1
+    #         if patience == 0:
+    #             print("Early stopping!")
+    #             with open(f'../logs/detect/1_all_Linear_{num_epochs}.txt', 'a') as f:
+    #                 f.write("Early stopping!\n")
+    #             break
+    #
+    # end_time = time.time()
+    # total_training_time = end_time - start_time
+    # print(f"Total training time: {total_training_time:.2f} seconds")
+    # with open(f'../logs/detect/1_all_Linear_{num_epochs}.txt', 'a') as f:
+    #     f.write(f"Total training time: {total_training_time:.2f} seconds\n")
 
     # 加载最佳模型并绘制ROC曲线
     model.load_state_dict(torch.load(best_model_path))
@@ -307,6 +308,7 @@ if __name__ == '__main__':
 
     true_labels = []
     pred_probs = []
+    pred_labels = []
 
     with torch.no_grad():
         for batch in test_loader:
@@ -316,7 +318,9 @@ if __name__ == '__main__':
 
             logits = model(input_ids, attention_mask)
             probabilities = torch.softmax(logits, dim=1)
-            pred_probs.extend(probabilities[:, 1].cpu().numpy())  # 正类概率
+            pred_probs.extend(probabilities[:, 1].cpu().numpy())
+            preds = torch.argmax(logits, dim=1)
+            pred_labels.extend(preds.cpu().numpy())
             true_labels.extend(labels.cpu().numpy())
 
     # 计算ROC和AUC
@@ -326,7 +330,13 @@ if __name__ == '__main__':
     # 绘制ROC曲线
     plot_roc_curve(fpr, tpr, roc_auc, path=f'../ROC/all_Linear.png')
 
-    # 输出AUC值
+    # 计算召回率、F1分数等指标
+    precision, recall, f1, _ = precision_recall_fscore_support(true_labels, pred_labels, average='binary')
+    classification_rep = classification_report(true_labels, pred_labels, target_names=['Non-Sarcastic', 'Sarcastic'])
+
+    # 输出结果
     print(f"AUC: {roc_auc:.4f}")
-    with open(f'../logs/detect/1_all_Linear_{num_epochs}.txt', 'a') as f:
-        f.write(f"AUC: {roc_auc:.4f}\n")
+    print(f"Recall: {recall:.4f}")
+    print(f"F1 Score: {f1:.4f}")
+    print("Classification Report:")
+    print(classification_rep)

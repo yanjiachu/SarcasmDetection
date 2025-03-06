@@ -7,4 +7,16 @@ Epoch 6/30, Train Loss: 0.0785, Train Acc: 97.31%, Test Loss: 0.7862, Test Acc: 
 Epoch 7/30, Train Loss: 0.0617, Train Acc: 97.79%, Test Loss: 0.8461, Test Acc: 77.67%
 Early stopping!
 Total training time: 3275.07 seconds
+
 AUC: 0.8581
+Recall: 0.8753
+F1 Score: 0.8527
+Classification Report:
+               precision    recall  f1-score   support
+
+Non-Sarcastic       0.72      0.64      0.68       780
+    Sarcastic       0.83      0.88      0.85      1580
+
+     accuracy                           0.80      2360
+    macro avg       0.77      0.76      0.76      2360
+ weighted avg       0.79      0.80      0.79      2360
