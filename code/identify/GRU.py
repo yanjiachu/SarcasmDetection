@@ -12,22 +12,20 @@ dropout_prob = 0.1
 num_epochs = 3
 train_size = 0.9
 test_size = 0.1
-train_path = '../data/train.json'
-train_topic_path = '../data/train_topic.json'
-model_path = '../bert-base-chinese'
+train_path = '../../data/train.json'
+train_topic_path = '../../data/train_topic.json'
+model_path = '../../bert-base-chinese'
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(f"device: {device}")
 
 # 定义封装的模型
 class MyModel(torch.nn.Module):
-    def __init__(self, num_labels, dropout_prob):
+    def __init__(self, num_labels, dropout_prob, hidden_size=768):
         super(MyModel, self).__init__()
         self.bert = BertModel.from_pretrained(model_path)
+        self.gru = torch.nn.GRU(self.bert.config.hidden_size, hidden_size, num_layers=1, batch_first=True)
         self.dropout = torch.nn.Dropout(dropout_prob)
-        self.relu = torch.nn.ReLU()
-        self.fc1 = torch.nn.Linear(self.bert.config.hidden_size, 256)
-        self.fc2 = torch.nn.Linear(256, 32)
-        self.classifier = torch.nn.Linear(32, num_labels)
+        self.classifier = torch.nn.Linear(hidden_size, num_labels)
 
         # 冻结 BERT 参数
         for param in self.bert.parameters():
@@ -38,25 +36,23 @@ class MyModel(torch.nn.Module):
             input_ids=input_ids,
             attention_mask=attention_mask
         )
-        pooled_output = outputs.last_hidden_state
+        last_hidden_state = outputs.last_hidden_state
 
-        pooled_output = self.fc1(pooled_output)
-        pooled_output = self.relu(pooled_output)
-        pooled_output = self.dropout(pooled_output)
-
-        pooled_output = self.fc2(pooled_output)
-        pooled_output = self.relu(pooled_output)
-        pooled_output = self.dropout(pooled_output)
-
-        logits = self.classifier(pooled_output)
+        # GRU 层处理序列数据
+        gru_output, h_n = self.gru(last_hidden_state)
+        gru_output = self.dropout(gru_output)
+        logits = self.classifier(gru_output)
 
         if labels is not None:
             loss_fct = torch.nn.CrossEntropyLoss()
-            loss = loss_fct(logits.view(-1, self.classifier.out_features), labels.view(-1))
+            # 计算损失时，只考虑非填充部分的有效 token
+            active_loss = attention_mask.view(-1) == 1
+            active_logits = logits.view(-1, self.classifier.out_features)[active_loss]
+            active_labels = labels.view(-1)[active_loss]
+            loss = loss_fct(active_logits, active_labels)
             return logits, loss
         else:
             return logits
-
 
 # 定义标签
 label2id = {'B-ORG': 0, 'I-ORG': 1, 'O': 2}
@@ -96,7 +92,7 @@ class SarcasmTargetDataset(Dataset):
                 padding='max_length',
                 max_length=256,
                 truncation=True,
-                return_offsets_mapping=True,  # 获取子词映射
+                return_offsets_mapping=True,
                 return_tensors='pt'
             )
 
@@ -109,8 +105,6 @@ class SarcasmTargetDataset(Dataset):
 
                 # 假设target是一个词，并且在分词后的offsets中
                 # 这里需要根据实际情况匹配目标词的位置
-                start_char = 0
-                end_char = len(input_text)
                 for i in range(len(offsets)):
                     if offsets[i][0] <= input_text.find(target) < offsets[i][1]:
                         start_idx = i
@@ -145,7 +139,6 @@ def load_topic_data(file_path):
         data = json.load(f)
     topic_dict = {item['topicId']: item for item in data}
     return topic_dict
-
 
 # 主函数
 if __name__ == '__main__':

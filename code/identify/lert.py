@@ -1,58 +1,55 @@
 import json
 import torch
+import time
 import numpy as np
+import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader, Dataset
-from transformers import BertTokenizerFast, BertModel
+from transformers import AutoTokenizer, AutoModel
 from sklearn.model_selection import train_test_split
 
 # 定义超参数
 batch_size = 16
 learning_rate = 5e-5
 dropout_prob = 0.1
-num_epochs = 3
+patience_num = 5    # 早停阈值
+draw_step = 3       # 绘制loss和acc的图像的间隔，建议与早停机制配合
+num_epochs = 30
 train_size = 0.9
 test_size = 0.1
-train_path = '../data/train.json'
-train_topic_path = '../data/train_topic.json'
-model_path = '../bert-base-chinese'
+train_path = '../../data/train.json'
+train_topic_path = '../../data/train_topic.json'
+model_path = '../../chinese-lert-base'
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(f"device: {device}")
 
 # 定义封装的模型
 class MyModel(torch.nn.Module):
-    def __init__(self, num_labels, dropout_prob, hidden_size=768):
+    def __init__(self, num_labels, dropout_prob):
         super(MyModel, self).__init__()
-        self.bert = BertModel.from_pretrained(model_path)
-        self.gru = torch.nn.GRU(self.bert.config.hidden_size, hidden_size, num_layers=1, batch_first=True)
+        self.lert = AutoModel.from_pretrained(model_path)
         self.dropout = torch.nn.Dropout(dropout_prob)
-        self.classifier = torch.nn.Linear(hidden_size, num_labels)
+        self.classifier = torch.nn.Linear(self.lert.config.hidden_size, num_labels)
 
-        # 冻结 BERT 参数
-        for param in self.bert.parameters():
-            param.requires_grad = False
+        # 冻结 LERT 参数
+        # for param in self.lert.parameters():
+        #     param.requires_grad = False
 
     def forward(self, input_ids, attention_mask, labels=None):
-        outputs = self.bert(
+        outputs = self.lert(
             input_ids=input_ids,
             attention_mask=attention_mask
         )
-        last_hidden_state = outputs.last_hidden_state
-
-        # GRU 层处理序列数据
-        gru_output, h_n = self.gru(last_hidden_state)
-        gru_output = self.dropout(gru_output)
-        logits = self.classifier(gru_output)
+        pooled_output = outputs.last_hidden_state
+        pooled_output = self.dropout(pooled_output)
+        logits = self.classifier(pooled_output)
 
         if labels is not None:
             loss_fct = torch.nn.CrossEntropyLoss()
-            # 计算损失时，只考虑非填充部分的有效 token
-            active_loss = attention_mask.view(-1) == 1
-            active_logits = logits.view(-1, self.classifier.out_features)[active_loss]
-            active_labels = labels.view(-1)[active_loss]
-            loss = loss_fct(active_logits, active_labels)
+            loss = loss_fct(logits.view(-1, self.classifier.out_features), labels.view(-1))
             return logits, loss
         else:
             return logits
+
 
 # 定义标签
 label2id = {'B-ORG': 0, 'I-ORG': 1, 'O': 2}
@@ -86,13 +83,13 @@ class SarcasmTargetDataset(Dataset):
             # 拼接评论和话题内容
             input_text = f"{review} [SEP] {topic_title} {topic_text_content}"
 
-            # 使用BERT tokenizer编码
+            # 使用 LERT tokenizer 编码
             encoding = self.tokenizer(
                 input_text,
                 padding='max_length',
                 max_length=256,
                 truncation=True,
-                return_offsets_mapping=True,
+                return_offsets_mapping=True,  # 获取子词映射
                 return_tensors='pt'
             )
 
@@ -105,6 +102,8 @@ class SarcasmTargetDataset(Dataset):
 
                 # 假设target是一个词，并且在分词后的offsets中
                 # 这里需要根据实际情况匹配目标词的位置
+                start_char = 0
+                end_char = len(input_text)
                 for i in range(len(offsets)):
                     if offsets[i][0] <= input_text.find(target) < offsets[i][1]:
                         start_idx = i
@@ -140,6 +139,29 @@ def load_topic_data(file_path):
     topic_dict = {item['topicId']: item for item in data}
     return topic_dict
 
+def plot_loss_acc(train_losses, test_losses, train_accuracies, test_accuracies, epoch, path):
+    epochs = range(1, epoch + 1)
+    plt.figure(figsize=(12, 4))
+
+    plt.subplot(1, 2, 1)
+    plt.plot(epochs, train_losses, 'b', label='Training Loss')
+    plt.plot(epochs, test_losses, 'r', label='Test Loss')
+    plt.title('Training Loss vs. Epochs')
+    plt.xlabel('Epochs')
+    plt.ylabel('Loss')
+    plt.legend()
+
+    plt.subplot(1, 2, 2)
+    plt.plot(epochs, train_accuracies, 'b', label='Train Accuracy')
+    plt.plot(epochs, test_accuracies, 'r', label='Test Accuracy')
+    plt.title('Test Accuracy vs. Epochs')
+    plt.xlabel('Epochs')
+    plt.ylabel('Accuracy')
+    plt.legend()
+
+    plt.tight_layout()
+    plt.savefig(path)
+
 # 主函数
 if __name__ == '__main__':
     # 加载数据
@@ -152,8 +174,8 @@ if __name__ == '__main__':
     # 分割数据集为训练集和测试集
     train_data, test_data = train_test_split(filtered_data, test_size=test_size, random_state=42)
 
-    # 初始化tokenizer
-    tokenizer = BertTokenizerFast.from_pretrained(model_path, use_fast=True)
+    # 初始化 LERT 分词器
+    tokenizer = AutoTokenizer.from_pretrained(model_path, use_fast=True)
 
     # 创建数据集
     train_dataset = SarcasmTargetDataset(train_data, topic_data, tokenizer, label2id)
@@ -174,11 +196,24 @@ if __name__ == '__main__':
     # 定义优化器
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
 
+    # 初始化列表
+    train_losses = []
+    test_losses = []
+    train_accuracies = []
+    test_accuracies = []
+
+    # 早停机制
+    patience = patience_num
+    best_accuracy = 0.0
+
     # 训练循环
     print("Training...")
-    for epoch in range(num_epochs):
+    start_time = time.time()
+    for epoch in range(1, num_epochs + 1):
         model.train()  # 设置模型为训练模式
         total_loss = 0.0
+        total_correct_comments = 0
+        total_comments = 0
 
         # 训练每一批次
         for batch in train_loader:
@@ -188,48 +223,107 @@ if __name__ == '__main__':
 
             optimizer.zero_grad()
 
-            _, loss = model(input_ids, attention_mask, labels=labels)
+            # 获取 logits 和 loss
+            logits, loss = model(input_ids, attention_mask, labels=labels)
             loss.backward()
             optimizer.step()
 
             total_loss += loss.item()
 
-        avg_train_loss = total_loss / len(train_loader)
-        print(f"Epoch {epoch + 1}/{num_epochs}, Average Training Loss: {avg_train_loss:.4f}")
-
-    # 测试阶段
-    model.eval()
-    print("Evaluating...")
-    with torch.no_grad():
-        true_labels = []
-        pred_labels = []
-        comment_correctness = []  # 记录每条评论是否全部正确
-
-        for batch in test_loader:
-            input_ids = batch['input_ids'].to(device)
-            attention_mask = batch['attention_mask'].to(device)
-            labels = batch['labels'].to(device)
-
-            logits = model(input_ids, attention_mask)
+            # 计算评论级别的训练精度
             predictions = torch.argmax(logits, dim=2)
-
-            # 将预测结果和真实标签转换为CPU和numpy格式
             batch_true_labels = labels.cpu().numpy()
             batch_pred_labels = predictions.cpu().numpy()
 
             # 逐条评论检查是否所有token都预测正确
             for i in range(len(batch_true_labels)):
                 is_correct = np.all(batch_true_labels[i] == batch_pred_labels[i])
-                comment_correctness.append(is_correct)
+                total_correct_comments += int(is_correct)
+                total_comments += 1
 
-            # 保存token级别的结果
-            true_labels.extend(batch_true_labels)
-            pred_labels.extend(batch_pred_labels)
+        avg_train_loss = total_loss / len(train_loader)
+        train_losses.append(avg_train_loss)
 
-        # 计算token级别的准确率
-        token_accuracy = np.mean(np.array(true_labels) == np.array(pred_labels))
-        print(f"Token-level Accuracy: {token_accuracy * 100:.2f}%")
+        # 计算并保存评论级别的训练精度
+        train_accuracy = total_correct_comments / total_comments
+        train_accuracies.append(train_accuracy)
+
+        # 测试阶段
+        model.eval()
+        true_labels = []
+        pred_labels = []
+        comment_correctness = []
+        total_test_loss = 0.0
+
+        with torch.no_grad():
+            for batch in test_loader:
+                input_ids = batch['input_ids'].to(device)
+                attention_mask = batch['attention_mask'].to(device)
+                labels = batch['labels'].to(device)
+
+                # 获取 logits 和 loss
+                logits, test_loss = model(input_ids, attention_mask, labels=labels)
+                predictions = torch.argmax(logits, dim=2)
+
+                # 累加测试损失
+                total_test_loss += test_loss.item()
+
+                # 将预测结果和真实标签转换为CPU和numpy格式
+                batch_true_labels = labels.cpu().numpy()
+                batch_pred_labels = predictions.cpu().numpy()
+
+                # 逐条评论检查是否所有token都预测正确
+                for i in range(len(batch_true_labels)):
+                    is_correct = np.all(batch_true_labels[i] == batch_pred_labels[i])
+                    comment_correctness.append(is_correct)
+
+                # 保存token级别的结果
+                true_labels.extend(batch_true_labels)
+                pred_labels.extend(batch_pred_labels)
 
         # 计算评论级别的准确率
         comment_accuracy = np.mean(comment_correctness)
-        print(f"Comment-level Accuracy: {comment_accuracy * 100:.2f}%")
+        test_accuracies.append(comment_accuracy)
+
+        # 计算并保存测试损失
+        avg_test_loss = total_test_loss / len(test_loader)
+        test_losses.append(avg_test_loss)
+
+        # 打印结果
+        print(f"Epoch {epoch}/{num_epochs}, "
+              f"Train Loss: {avg_train_loss:.4f}, "
+              f"Train Acc: {train_accuracy * 100:.2f}%, "
+              f"Test Loss: {avg_test_loss:.4f}, "
+              f"Test Acc: {comment_accuracy * 100:.2f}%")
+
+        # 写入日志
+        with open(f'../logs/identify/3_all_lert_{num_epochs}.txt', 'a') as f:
+            f.write(f"Epoch {epoch}/{num_epochs}, "
+                    f"Train Loss: {avg_train_loss:.4f}, "
+                    f"Train Acc: {train_accuracy * 100:.2f}%, "
+                    f"Test Loss: {avg_test_loss:.4f}, "
+                    f"Test Acc: {comment_accuracy * 100:.2f}%\n")
+
+        # 阶段输出图像（如果需要）
+        if epoch % draw_step == 0:
+            plot_loss_acc(train_losses, test_losses, train_accuracies, test_accuracies, epoch,
+                path=f'../training_curves/identify/3_all_lert_{epoch}.png'
+            )
+
+        # 早停机制
+        if comment_accuracy > best_accuracy:
+            patience = patience_num
+            best_accuracy = comment_accuracy
+        else:
+            patience -= 1
+            if patience == 0:
+                print("Early stopping!")
+                with open(f'../logs/identify/3_all_lert_{num_epochs}.txt', 'a') as f:
+                    f.write("Early stopping!\n")
+                break
+
+    end_time = time.time()
+    total_training_time = end_time - start_time
+    print(f"Total training time: {total_training_time:.2f} seconds")
+    with open(f'../logs/identify/3_all_lert_{num_epochs}.txt', 'a') as f:
+        f.write(f"Total training time: {total_training_time:.2f} seconds\n")

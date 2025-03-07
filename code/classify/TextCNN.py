@@ -6,57 +6,106 @@ import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader, Dataset
 from transformers import BertTokenizerFast, BertModel
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import confusion_matrix
-import seaborn as sns
 
 # 定义超参数
 batch_size = 16
 learning_rate = 5e-5
-dropout_prob = 0.1
+dropout_prob = 0.25
 patience_num = 5    # 早停阈值
 draw_step = 3       # 绘制loss和acc的图像的间隔，建议与早停机制配合
 num_epochs = 30
 train_size = 0.9
 test_size = 0.1
-train_path = '../data/train.json'
-train_topic_path = '../data/train_topic.json'
-model_path = '../bert-base-chinese'
+train_path = '../../data/train.json'
+train_topic_path = '../../data/train_topic.json'
+model_path = '../../bert-base-chinese'
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(f"device: {device}")
+
+# 定义多核TextCNN模块
+class TextCNN(torch.nn.Module):
+    def __init__(self, hidden_size, num_classes, dropout_prob):
+        super(TextCNN, self).__init__()
+        self.hidden_size = hidden_size
+        # 定义多个不同卷积核大小的卷积层
+        self.conv1 = torch.nn.Sequential(
+            torch.nn.Conv1d(hidden_size, hidden_size, kernel_size=2, padding=1),
+            torch.nn.ReLU(),
+        )
+        self.conv2 = torch.nn.Sequential(
+            torch.nn.Conv1d(hidden_size, hidden_size, kernel_size=3, padding=1),
+            torch.nn.ReLU(),
+        )
+        self.conv3 = torch.nn.Sequential(
+            torch.nn.Conv1d(hidden_size, hidden_size, kernel_size=4, padding=1),
+            torch.nn.ReLU(),
+        )
+        self.fc = torch.nn.Linear(hidden_size * 3, num_classes)
+        self.dropout = torch.nn.Dropout(dropout_prob)
+        self.relu = torch.nn.ReLU()
+
+    def forward(self, x):
+        # x.shape = (batch_size, sequence_length, hidden_size)
+        x = x.permute(0, 2, 1)  # 转换为 (batch_size, hidden_size, sequence_length)
+
+        # 应用多卷积核卷积
+        out1 = self.conv1(x)
+        out2 = self.conv2(x)
+        out3 = self.conv3(x)
+
+        # 全局最大池化，保留最重要的特征
+        out1 = torch.max(out1, dim=-1)[0]
+        out2 = torch.max(out2, dim=-1)[0]
+        out3 = torch.max(out3, dim=-1)[0]
+
+        # 拼接所有卷积层的输出特征
+        out = torch.cat((out1, out2, out3), dim=1)
+
+        # 全连接层进行分类
+        logits = self.fc(out)
+
+        return logits
+
 
 # 定义封装的模型
 class MyModel(torch.nn.Module):
     def __init__(self, num_labels, dropout_prob):
         super(MyModel, self).__init__()
         self.bert = BertModel.from_pretrained(model_path)
+        self.cnn = TextCNN(
+            self.bert.config.hidden_size,
+            num_labels,
+            dropout_prob
+        )
         self.dropout = torch.nn.Dropout(dropout_prob)
-        self.classifier = torch.nn.Linear(self.bert.config.hidden_size, num_labels)
-
-        # 冻结 BERT 参数，除了最后3层
-        # for name, param in self.bert.named_parameters():
-        #     if 'encoder.layer.11' in name or 'encoder.layer.10' in name or 'encoder.layer.9' in name:
-        #         param.requires_grad = True
-        #     else:
-        #         param.requires_grad = False
-
-        # 冻结 BERT q前三层参数
-        # for name, param in self.bert.named_parameters():
-        #     if 'encoder.layer.0' in name or 'encoder.layer.1' in name or 'encoder.layer.2' in name:
-        #         param.requires_grad = False
-        #     else:
-        #         param.requires_grad = True
+        self.classifier = torch.nn.Linear(774, num_labels)
 
         # 冻结 BERT 参数
         # for param in self.bert.parameters():
         #     param.requires_grad = False
+
+        # 冻结 BERT q前三层参数
+        for name, param in self.bert.named_parameters():
+            if 'encoder.layer.0' in name or 'encoder.layer.1' in name or 'encoder.layer.2' in name:
+                param.requires_grad = False
+            else:
+                param.requires_grad = True
 
     def forward(self, input_ids, attention_mask, labels=None):
         outputs = self.bert(
             input_ids=input_ids,
             attention_mask=attention_mask
         )
-        pooled_output = outputs.pooler_output
+        pooled_output = outputs.pooler_output  # (batch_size, hidden_size)
+
+        # 获取 BERT 的隐藏状态
+        hidden_states = outputs.last_hidden_state  # (batch_size, sequence_length, hidden_size)
+        cnn_features = self.cnn(hidden_states)  # (batch_size, hidden_size*3)
+
+        # 合并 BERT 的池化输出和 CNN 的特征
+        pooled_output = torch.cat((pooled_output, cnn_features), dim=1)  # (batch_size, hidden_size + 3*hidden_size)
         pooled_output = self.dropout(pooled_output)
+
         logits = self.classifier(pooled_output)
 
         if labels is not None:
@@ -288,7 +337,7 @@ if __name__ == '__main__':
               f"Test Loss: {avg_test_loss:.4f}, "
               f"Test Acc: {test_accuracy * 100:.2f}%")
         # 写入日志
-        with open(f"../logs/classify/2_all_Linear_{num_epochs}.txt", "a") as f:
+        with open(f"../logs/classify/2_3-11_TextCNN_{num_epochs}.txt", "a") as f:
             f.write(f"Epoch {epoch}/{num_epochs}, "
                     f"Train Loss: {avg_train_loss:.4f}, "
                     f"Train Acc: {train_accuracy * 100:.2f}%, "
@@ -298,65 +347,23 @@ if __name__ == '__main__':
         # 阶段输出图像
         if epoch % draw_step == 0:
             plot_loss_acc(train_losses, test_losses, train_accuracies, test_accuracies, epoch,
-                path=f'../training_curves/classify/2_all_Linear_{epoch}.png'
+                path=f'../training_curves/classify/2_3-11_TextCNN_{epoch}.png'
             )
 
         # 早停机制
         if test_accuracy > best_accuracy:
             patience = patience_num
             best_accuracy = test_accuracy
-            torch.save(model.state_dict(), '../models/classify/best_model.pth')
         else:
             patience -= 1
             if patience == 0:
                 print("Early stopping!")
-                with open(f"../logs/classify/2_all_Linear_{num_epochs}.txt", "a") as f:
+                with open(f"../logs/classify/2_3-11_TextCNN_{num_epochs}.txt", "a") as f:
                     f.write("Early stopping!\n")
                 break
 
     end_time = time.time()
     total_training_time = end_time - start_time
     print(f"Total training time: {total_training_time:.2f} seconds")
-    with open(f"../logs/classify/2_all_Linear_{num_epochs}.txt", "a") as f:
+    with open(f"../logs/classify/2_3-11_TextCNN_{num_epochs}.txt", "a") as f:
         f.write(f"Total training time: {total_training_time:.2f} seconds\n")
-
-    # 加载最佳模型
-    model.load_state_dict(torch.load('../models/classify/best_model.pth'))
-    model.eval()
-
-    # 收集测试集预测结果
-    true_labels = []
-    pred_labels = []
-
-    with torch.no_grad():
-        for batch in test_loader:
-            input_ids = []
-            attention_masks = []
-            labels = []
-            for sample in batch:
-                input_ids.append(sample['input_ids'])
-                attention_masks.append(sample['attention_mask'])
-                labels.append(sample['label'])
-
-            input_ids = torch.stack(input_ids).to(device)
-            attention_masks = torch.stack(attention_masks).to(device)
-            labels = torch.stack(labels).to(device)
-
-            logits = model(input_ids, attention_masks)
-            predictions = torch.argmax(logits, dim=1)
-
-            true_labels.extend(labels.cpu().numpy())
-            pred_labels.extend(predictions.cpu().numpy())
-
-    # 生成混淆矩阵
-    cm = confusion_matrix(true_labels, pred_labels, labels=range(6))
-
-    plt.figure(figsize=(12, 10))
-    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues',
-                xticklabels=[1, 2, 3, 4, 5, 6],
-                yticklabels=[1, 2, 3, 4, 5, 6])
-    plt.xlabel('Predicted Type')
-    plt.ylabel('True Type')
-    plt.title('ConfusionMatrix of SarcasmTypes')
-    plt.savefig('../ConfusionMatrix/2_all_Linear_30.png')
-    plt.close()

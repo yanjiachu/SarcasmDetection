@@ -12,20 +12,22 @@ dropout_prob = 0.1
 num_epochs = 3
 train_size = 0.9
 test_size = 0.1
-train_path = '../data/train.json'
-train_topic_path = '../data/train_topic.json'
-model_path = '../bert-base-chinese'
+train_path = '../../data/train.json'
+train_topic_path = '../../data/train_topic.json'
+model_path = '../../bert-base-chinese'
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(f"device: {device}")
 
 # 定义封装的模型
 class MyModel(torch.nn.Module):
-    def __init__(self, num_labels, dropout_prob, hidden_size=768):
+    def __init__(self, num_labels, dropout_prob):
         super(MyModel, self).__init__()
         self.bert = BertModel.from_pretrained(model_path)
-        self.gru = torch.nn.GRU(self.bert.config.hidden_size, hidden_size, num_layers=1, batch_first=True)
         self.dropout = torch.nn.Dropout(dropout_prob)
-        self.classifier = torch.nn.Linear(hidden_size, num_labels)
+        self.relu = torch.nn.ReLU()
+        self.fc1 = torch.nn.Linear(self.bert.config.hidden_size, 256)
+        self.fc2 = torch.nn.Linear(256, 32)
+        self.classifier = torch.nn.Linear(32, num_labels)
 
         # 冻结 BERT 参数
         for param in self.bert.parameters():
@@ -36,14 +38,16 @@ class MyModel(torch.nn.Module):
             input_ids=input_ids,
             attention_mask=attention_mask
         )
-        last_hidden_state = outputs.last_hidden_state
+        pooled_output = outputs.pooler_output
 
-        # 提取最后一层的隐藏状态
-        gru_output, h_n = self.gru(last_hidden_state)
-
-        # 取最后一步的隐藏状态作为特征
-        pooled_output = h_n.squeeze(0)
+        pooled_output = self.fc1(pooled_output)
+        pooled_output = self.relu(pooled_output)
         pooled_output = self.dropout(pooled_output)
+
+        pooled_output = self.fc2(pooled_output)
+        pooled_output = self.relu(pooled_output)
+        pooled_output = self.dropout(pooled_output)
+
         logits = self.classifier(pooled_output)
 
         if labels is not None:

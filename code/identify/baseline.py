@@ -4,21 +4,21 @@ import time
 import numpy as np
 import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader, Dataset
-from transformers import AutoTokenizer, AutoModel
+from transformers import BertTokenizerFast, BertModel
 from sklearn.model_selection import train_test_split
 
 # 定义超参数
 batch_size = 16
 learning_rate = 5e-5
-dropout_prob = 0.1
+dropout_prob = 0.2
 patience_num = 5    # 早停阈值
 draw_step = 3       # 绘制loss和acc的图像的间隔，建议与早停机制配合
 num_epochs = 30
 train_size = 0.9
 test_size = 0.1
-train_path = '../data/train.json'
-train_topic_path = '../data/train_topic.json'
-model_path = '../chinese-lert-base'
+train_path = '../../data/train.json'
+train_topic_path = '../../data/train_topic.json'
+model_path = '../../bert-base-chinese'
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(f"device: {device}")
 
@@ -26,16 +26,30 @@ print(f"device: {device}")
 class MyModel(torch.nn.Module):
     def __init__(self, num_labels, dropout_prob):
         super(MyModel, self).__init__()
-        self.lert = AutoModel.from_pretrained(model_path)
+        self.bert = BertModel.from_pretrained(model_path)
         self.dropout = torch.nn.Dropout(dropout_prob)
-        self.classifier = torch.nn.Linear(self.lert.config.hidden_size, num_labels)
+        self.classifier = torch.nn.Linear(self.bert.config.hidden_size, num_labels)
 
-        # 冻结 LERT 参数
-        # for param in self.lert.parameters():
+        # 冻结 BERT 参数，除了最后1层
+        # for name, param in self.bert.named_parameters():
+        #     if 'encoder.layer.11' in name:
+        #         param.requires_grad = True
+        #     else:
+        #         param.requires_grad = False
+
+        # 冻结 BERT 参数，除了最后3层
+        # for name, param in self.bert.named_parameters():
+        #     if 'encoder.layer.11' in name or 'encoder.layer.10' in name or 'encoder.layer.9' in name:
+        #         param.requires_grad = True
+        #     else:
+        #         param.requires_grad = False
+
+        # 冻结 BERT 参数
+        # for param in self.bert.parameters():
         #     param.requires_grad = False
 
     def forward(self, input_ids, attention_mask, labels=None):
-        outputs = self.lert(
+        outputs = self.bert(
             input_ids=input_ids,
             attention_mask=attention_mask
         )
@@ -83,7 +97,7 @@ class SarcasmTargetDataset(Dataset):
             # 拼接评论和话题内容
             input_text = f"{review} [SEP] {topic_title} {topic_text_content}"
 
-            # 使用 LERT tokenizer 编码
+            # 使用BERT tokenizer编码
             encoding = self.tokenizer(
                 input_text,
                 padding='max_length',
@@ -174,8 +188,8 @@ if __name__ == '__main__':
     # 分割数据集为训练集和测试集
     train_data, test_data = train_test_split(filtered_data, test_size=test_size, random_state=42)
 
-    # 初始化 LERT 分词器
-    tokenizer = AutoTokenizer.from_pretrained(model_path, use_fast=True)
+    # 初始化tokenizer
+    tokenizer = BertTokenizerFast.from_pretrained(model_path, use_fast=True)
 
     # 创建数据集
     train_dataset = SarcasmTargetDataset(train_data, topic_data, tokenizer, label2id)
@@ -297,7 +311,7 @@ if __name__ == '__main__':
               f"Test Acc: {comment_accuracy * 100:.2f}%")
 
         # 写入日志
-        with open(f'../logs/identify/3_all_lert_{num_epochs}.txt', 'a') as f:
+        with open(f'../logs/identify/3_all_Linear_{num_epochs}.txt', 'a') as f:
             f.write(f"Epoch {epoch}/{num_epochs}, "
                     f"Train Loss: {avg_train_loss:.4f}, "
                     f"Train Acc: {train_accuracy * 100:.2f}%, "
@@ -307,7 +321,7 @@ if __name__ == '__main__':
         # 阶段输出图像（如果需要）
         if epoch % draw_step == 0:
             plot_loss_acc(train_losses, test_losses, train_accuracies, test_accuracies, epoch,
-                path=f'../training_curves/identify/3_all_lert_{epoch}.png'
+                path=f'../training_curves/identify/3_all_Linear_{epoch}.png'
             )
 
         # 早停机制
@@ -318,12 +332,12 @@ if __name__ == '__main__':
             patience -= 1
             if patience == 0:
                 print("Early stopping!")
-                with open(f'../logs/identify/3_all_lert_{num_epochs}.txt', 'a') as f:
+                with open(f'../logs/identify/3_all_Linear_{num_epochs}.txt', 'a') as f:
                     f.write("Early stopping!\n")
                 break
 
     end_time = time.time()
     total_training_time = end_time - start_time
     print(f"Total training time: {total_training_time:.2f} seconds")
-    with open(f'../logs/identify/3_all_lert_{num_epochs}.txt', 'a') as f:
+    with open(f'../logs/identify/3_all_Linear_{num_epochs}.txt', 'a') as f:
         f.write(f"Total training time: {total_training_time:.2f} seconds\n")

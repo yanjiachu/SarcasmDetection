@@ -8,18 +8,19 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import roc_curve, auc, precision_recall_fscore_support, classification_report
 
 # 定义超参数
-batch_size = 16
-learning_rate = 5e-5
-dropout_prob = 0.1
-patience_num = 5    # 早停阈值
-draw_step = 3       # 绘制loss和acc的图像的间隔，建议与早停机制配合
+batch_size = 32
+learning_rate = 1e-4
+dropout_prob = 0.2
+patience_num = 3    # 早停阈值
+draw_step = 3       # 绘制loss和acc的图像的间隔
 num_epochs = 30
 train_size = 0.9
 test_size = 0.1
 train_path = '../data/train.json'
 train_topic_path = '../data/train_topic.json'
-model_path = '../bert-base-chinese'
-best_model_path = '../models/detect/mynet.pth'
+# model_path = '../bert-base-chinese'
+model_path = '../chinese-macbert-base'
+best_model_path = '../models/detect/mynet_mac_2.pth'
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(f"device: {device}")
 
@@ -30,7 +31,7 @@ class MyModel(torch.nn.Module):
         self.bert = BertModel.from_pretrained(model_path)
         self.dropout = torch.nn.Dropout(dropout_prob)
         self.diff_layer = torch.nn.Sequential(
-            torch.nn.Linear(768 * 2, 256),  # 双通道融合
+            torch.nn.Linear(768 * 2, 256),
             torch.nn.ReLU(),
             torch.nn.Dropout(dropout_prob),
             torch.nn.Linear(256, num_labels)
@@ -88,7 +89,7 @@ class SarcasmDataset(Dataset):
 
         # 构造双通道输入
         comment_input = review
-        context_input = f"{review} [SEP] {topic_title} {topic_text_content}"
+        context_input = f"{topic_title} [SEP] {topic_text_content}"
 
         # 编码
         comment_encoding = self.tokenizer(
@@ -155,13 +156,14 @@ def plot_roc_curve(fpr, tpr, roc_auc, path):
     plt.figure()
     plt.plot(fpr, tpr, color='darkorange', lw=2, label=f'ROC curve (AUC = {roc_auc:.2f})')
     plt.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--')
-    plt.xlim([0.0, 1.0])
-    plt.ylim([0.0, 1.0])
+    plt.xlim([0.0, 1.1])
+    plt.ylim([0.0, 1.1])
     plt.xlabel('False Positive Rate')
     plt.ylabel('True Positive Rate')
     plt.title('Receiver Operating Characteristic')
     plt.legend(loc="lower right")
-    plt.savefig(path)
+    # plt.savefig(path)
+    plt.show()
     plt.close()
 
 # 主函数
@@ -279,18 +281,18 @@ if __name__ == '__main__':
               f"Test Loss: {avg_test_loss:.4f}, "
               f"Test Acc: {test_accuracy * 100:.2f}%")
 
-        with open(f'../logs/detect/mynet_{num_epochs}.txt', 'a') as f:
-            f.write(f"Epoch {epoch}/{num_epochs}, "
-                    f"Train Loss: {avg_train_loss:.4f}, "
-                    f"Train Acc: {train_accuracy * 100:.2f}%, "
-                    f"Test Loss: {avg_test_loss:.4f}, "
-                    f"Test Acc: {test_accuracy * 100:.2f}%\n")
+        # with open(f'../logs/detect/mynet_{num_epochs}.txt', 'a') as f:
+        #     f.write(f"Epoch {epoch}/{num_epochs}, "
+        #             f"Train Loss: {avg_train_loss:.4f}, "
+        #             f"Train Acc: {train_accuracy * 100:.2f}%, "
+        #             f"Test Loss: {avg_test_loss:.4f}, "
+        #             f"Test Acc: {test_accuracy * 100:.2f}%\n")
 
-        # 阶段输出图像（如果需要）
-        if epoch % draw_step == 0:
-            plot_loss_acc(train_losses, test_losses, train_accuracies, test_accuracies, epoch,
-                path=f'../training_curves/detect/mynet_{epoch}.png'
-            )
+        # 阶段输出图像
+        # if epoch % draw_step == 0:
+        #     plot_loss_acc(train_losses, test_losses, train_accuracies, test_accuracies, epoch,
+        #         path=f'../training_curves/detect/mynet_{epoch}.png'
+        #     )
 
         # 早停机制
         if test_accuracy > best_accuracy:
@@ -301,15 +303,15 @@ if __name__ == '__main__':
             patience -= 1
             if patience == 0:
                 print("Early stopping!")
-                with open(f'../logs/detect/mynet_{num_epochs}.txt', 'a') as f:
-                    f.write("Early stopping!\n")
+                # with open(f'../logs/detect/mynet_{num_epochs}.txt', 'a') as f:
+                #     f.write("Early stopping!\n")
                 break
 
     end_time = time.time()
     total_training_time = end_time - start_time
     print(f"Total training time: {total_training_time:.2f} seconds")
-    with open(f'../logs/detect/mynet_{num_epochs}.txt', 'a') as f:
-        f.write(f"Total training time: {total_training_time:.2f} seconds\n\n")
+    # with open(f'../logs/detect/mynet_{num_epochs}.txt', 'a') as f:
+    #     f.write(f"Total training time: {total_training_time:.2f} seconds\n\n")
 
 
     # 加载最佳模型并评估
@@ -351,13 +353,9 @@ if __name__ == '__main__':
     print(f"AUC: {roc_auc:.4f}")
     print(f"Recall: {recall:.4f}")
     print(f"F1 Score: {f1:.4f}")
-    print("Classification Report:")
-    print(classification_rep)
 
     # 写入日志
-    with open(f'../logs/detect/mynet_{num_epochs}.txt', 'a') as f:
-        f.write(f"AUC: {roc_auc:.4f}\n")
-        f.write(f"Recall: {recall:.4f}\n")
-        f.write(f"F1 Score: {f1:.4f}\n")
-        f.write("Classification Report:\n")
-        f.write(classification_rep)
+    # with open(f'../logs/detect/mynet_{num_epochs}.txt', 'a') as f:
+    #     f.write(f"AUC: {roc_auc:.4f}\n")
+    #     f.write(f"Recall: {recall:.4f}\n")
+    #     f.write(f"F1 Score: {f1:.4f}\n")
