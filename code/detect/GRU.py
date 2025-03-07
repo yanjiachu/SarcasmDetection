@@ -12,9 +12,9 @@ dropout_prob = 0.1
 num_epochs = 3
 train_size = 0.9
 test_size = 0.1
-train_path = '../data/train.json'
-train_topic_path = '../data/train_topic.json'
-model_path = '../bert-base-chinese'
+train_path = '../../data/train.json'
+train_topic_path = '../../data/train_topic.json'
+model_path = '../../bert-base-chinese'
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(f"device: {device}")
 
@@ -23,7 +23,7 @@ class MyModel(torch.nn.Module):
     def __init__(self, num_labels, dropout_prob, hidden_size=768):
         super(MyModel, self).__init__()
         self.bert = BertModel.from_pretrained(model_path)
-        self.lstm = torch.nn.LSTM(self.bert.config.hidden_size, hidden_size, num_layers=1, batch_first=True)
+        self.gru = torch.nn.GRU(self.bert.config.hidden_size, hidden_size, num_layers=1, batch_first=True)
         self.dropout = torch.nn.Dropout(dropout_prob)
         self.classifier = torch.nn.Linear(hidden_size, num_labels)
 
@@ -38,10 +38,10 @@ class MyModel(torch.nn.Module):
         )
         last_hidden_state = outputs.last_hidden_state
 
-        # LSTM 层处理序列数据
-        lstm_output, (h_n, c_n) = self.lstm(last_hidden_state)
+        # 提取最后一层的隐藏状态
+        gru_output, h_n = self.gru(last_hidden_state)
 
-        # 使用 LSTM 的最后一个时间步的隐藏状态作为特征
+        # 取最后一步的隐藏状态作为特征
         pooled_output = h_n.squeeze(0)
         pooled_output = self.dropout(pooled_output)
         logits = self.classifier(pooled_output)
@@ -104,7 +104,6 @@ def load_topic_data(file_path):
         data = json.load(f)
     topic_dict = {item['topicId']: item for item in data}
     return topic_dict
-
 
 # 主函数
 if __name__ == '__main__':

@@ -16,11 +16,11 @@ draw_step = 3       # 绘制loss和acc的图像的间隔
 num_epochs = 30
 train_size = 0.9
 test_size = 0.1
-train_path = '../data/train.json'
-train_topic_path = '../data/train_topic.json'
-# model_path = '../bert-base-chinese'
-model_path = '../chinese-macbert-base'
-best_model_path = '../models/detect/mynet_mac_2.pth'
+train_path = '../../data/train.json'
+train_topic_path = '../../data/train_topic.json'
+# model_path = '../../bert-base-chinese'
+model_path = '../../chinese-macbert-base'
+best_model_path = '../../models/detect/mynet_mac_2.pth'
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(f"device: {device}")
 
@@ -303,14 +303,14 @@ if __name__ == '__main__':
             patience -= 1
             if patience == 0:
                 print("Early stopping!")
-                # with open(f'../logs/detect/mynet_{num_epochs}.txt', 'a') as f:
+                # with open(f'../../logs/detect/mynet_{num_epochs}.txt', 'a') as f:
                 #     f.write("Early stopping!\n")
                 break
 
     end_time = time.time()
     total_training_time = end_time - start_time
     print(f"Total training time: {total_training_time:.2f} seconds")
-    # with open(f'../logs/detect/mynet_{num_epochs}.txt', 'a') as f:
+    # with open(f'../../logs/detect/mynet_{num_epochs}.txt', 'a') as f:
     #     f.write(f"Total training time: {total_training_time:.2f} seconds\n\n")
 
 
@@ -343,7 +343,7 @@ if __name__ == '__main__':
     fpr, tpr, _ = roc_curve(true_labels, pred_probs)
     roc_auc = auc(fpr, tpr)
 
-    plot_roc_curve(fpr, tpr, roc_auc, path=f'../ROC/1_mynet.png')
+    plot_roc_curve(fpr, tpr, roc_auc, path=f'../../ROC/1_mynet.png')
 
     # 计算召回率、F1分数等指标
     precision, recall, f1, _ = precision_recall_fscore_support(true_labels, pred_labels, average='binary')
