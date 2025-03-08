@@ -13,7 +13,7 @@ import seaborn as sns
 batch_size = 16
 learning_rate = 5e-5
 dropout_prob = 0.1
-patience_num = 5    # 早停阈值
+patience_num = 3    # 早停阈值
 draw_step = 3       # 绘制loss和acc的图像的间隔，建议与早停机制配合
 num_epochs = 30
 train_size = 0.9
@@ -21,6 +21,7 @@ test_size = 0.1
 train_path = '../../data/train.json'
 train_topic_path = '../../data/train_topic.json'
 model_path = '../../bert-base-chinese'
+pic_path = '../../ConfusionMatrix/bert.png'
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(f"device: {device}")
 
@@ -288,7 +289,7 @@ if __name__ == '__main__':
               f"Test Loss: {avg_test_loss:.4f}, "
               f"Test Acc: {test_accuracy * 100:.2f}%")
         # 写入日志
-        with open(f"../logs/classify/2_all_Linear_{num_epochs}.txt", "a") as f:
+        with open(f"../../logs/classify/2_all_Linear_{num_epochs}.txt", "a") as f:
             f.write(f"Epoch {epoch}/{num_epochs}, "
                     f"Train Loss: {avg_train_loss:.4f}, "
                     f"Train Acc: {train_accuracy * 100:.2f}%, "
@@ -296,10 +297,10 @@ if __name__ == '__main__':
                     f"Test Acc: {test_accuracy * 100:.2f}%\n")
 
         # 阶段输出图像
-        if epoch % draw_step == 0:
-            plot_loss_acc(train_losses, test_losses, train_accuracies, test_accuracies, epoch,
-                path=f'../training_curves/classify/2_all_Linear_{epoch}.png'
-            )
+        # if epoch % draw_step == 0:
+        #     plot_loss_acc(train_losses, test_losses, train_accuracies, test_accuracies, epoch,
+        #         path=f'../training_curves/classify/2_all_Linear_{epoch}.png'
+        #     )
 
         # 早停机制
         if test_accuracy > best_accuracy:
@@ -310,14 +311,14 @@ if __name__ == '__main__':
             patience -= 1
             if patience == 0:
                 print("Early stopping!")
-                with open(f"../logs/classify/2_all_Linear_{num_epochs}.txt", "a") as f:
+                with open(f"../../logs/classify/2_all_Linear_{num_epochs}.txt", "a") as f:
                     f.write("Early stopping!\n")
                 break
 
     end_time = time.time()
     total_training_time = end_time - start_time
     print(f"Total training time: {total_training_time:.2f} seconds")
-    with open(f"../logs/classify/2_all_Linear_{num_epochs}.txt", "a") as f:
+    with open(f"../../logs/classify/2_all_Linear_{num_epochs}.txt", "a") as f:
         f.write(f"Total training time: {total_training_time:.2f} seconds\n")
 
     # 加载最佳模型
@@ -358,5 +359,5 @@ if __name__ == '__main__':
     plt.xlabel('Predicted Type')
     plt.ylabel('True Type')
     plt.title('ConfusionMatrix of SarcasmTypes')
-    plt.savefig('../ConfusionMatrix/2_all_Linear_30.png')
+    plt.savefig(pic_path)
     plt.close()
