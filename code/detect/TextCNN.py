@@ -4,21 +4,23 @@ import time
 import numpy as np
 import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader, Dataset
-from transformers import BertTokenizer, BertModel
+from transformers import BertModel, BertTokenizerFast
 from sklearn.model_selection import train_test_split
+from sklearn.metrics import roc_curve, auc, precision_recall_fscore_support
+
 
 # 定义超参数
 batch_size = 16
 learning_rate = 5e-5
 dropout_prob = 0.05
-patience_num = 3    # 早停阈值
-draw_step = 3       # 绘制loss和acc的图像的间隔，建议与早停机制配合
-num_epochs = 10
+patience_num = 5    # 早停阈值
+num_epochs = 30
 train_size = 0.9
 test_size = 0.1
 train_path = '../../data/train.json'
 train_topic_path = '../../data/train_topic.json'
 model_path = '../../bert-base-chinese'
+best_model_path = '../../models/detect/cnn.pth'
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(f"device: {device}")
 
@@ -30,43 +32,20 @@ class TextCNN(torch.nn.Module):
         self.hidden_size = hidden_size
         # 定义多个不同卷积核大小的卷积层
         self.conv1 = torch.nn.Sequential(
-            torch.nn.Conv1d(hidden_size, hidden_size, kernel_size=2, padding=1),
-            torch.nn.ReLU(),
-        )
-        self.conv2 = torch.nn.Sequential(
             torch.nn.Conv1d(hidden_size, hidden_size, kernel_size=3, padding=1),
             torch.nn.ReLU(),
         )
-        self.conv3 = torch.nn.Sequential(
-            torch.nn.Conv1d(hidden_size, hidden_size, kernel_size=4, padding=1),
-            torch.nn.ReLU(),
-        )
-        self.fc = torch.nn.Linear(hidden_size * 3, num_classes)
+        self.fc = torch.nn.Linear(hidden_size, num_classes)
         self.dropout = torch.nn.Dropout(dropout_prob)
         self.relu = torch.nn.ReLU()
 
     def forward(self, x):
-        # x.shape = (batch_size, sequence_length, hidden_size)
-        x = x.permute(0, 2, 1)  # 转换为 (batch_size, hidden_size, sequence_length)
-
-        # 应用多卷积核卷积
-        out1 = self.conv1(x)
-        out2 = self.conv2(x)
-        out3 = self.conv3(x)
-
+        x = x.permute(0, 2, 1)
+        out = self.conv1(x)
         # 全局最大池化，保留最重要的特征
-        out1 = torch.max(out1, dim=-1)[0]
-        out2 = torch.max(out2, dim=-1)[0]
-        out3 = torch.max(out3, dim=-1)[0]
-
-        # 拼接所有卷积层的输出特征
-        out = torch.cat((out1, out2, out3), dim=1)
-
-        # 全连接层进行分类
+        out = torch.max(out, dim=-1)[0]
         logits = self.fc(out)
-
         return logits
-
 
 # 定义封装的模型
 class MyModel(torch.nn.Module):
@@ -80,13 +59,6 @@ class MyModel(torch.nn.Module):
         )
         self.dropout = torch.nn.Dropout(dropout_prob)
         self.classifier = torch.nn.Linear(770, num_labels)
-
-        # 冻结 BERT 参数，除了最后1层
-        # for name, param in self.bert.named_parameters():
-        #     if 'encoder.layer.11' in name:
-        #         param.requires_grad = True
-        #     else:
-        #         param.requires_grad = False
 
         # 冻结 BERT 参数
         for param in self.bert.parameters():
@@ -115,7 +87,6 @@ class MyModel(torch.nn.Module):
             return logits, loss
         else:
             return logits
-
 
 # 定义数据集类
 class MyDataset(Dataset):
@@ -156,13 +127,11 @@ class MyDataset(Dataset):
             'label': torch.tensor(is_sarcasm, dtype=torch.long)
         }
 
-
 # 加载评论
 def load_data_dev(file_path):
     with open(file_path, 'r', encoding='utf-8') as f:
         data = json.load(f)
     return data
-
 
 # 加载话题
 def load_topic_data(file_path):
@@ -171,28 +140,20 @@ def load_topic_data(file_path):
     topic_dict = {item['topicId']: item for item in data}
     return topic_dict
 
-def plot_loss_acc(train_losses, test_losses, train_accuracies, test_accuracies, epoch, path):
-    epochs = range(1, epoch + 1)
-    plt.figure(figsize=(12, 4))
-
-    plt.subplot(1, 2, 1)
-    plt.plot(epochs, train_losses, 'b', label='Training Loss')
-    plt.plot(epochs, test_losses, 'r', label='Test Loss')
-    plt.title('Training Loss vs. Epochs')
-    plt.xlabel('Epochs')
-    plt.ylabel('Loss')
-    plt.legend()
-
-    plt.subplot(1, 2, 2)
-    plt.plot(epochs, train_accuracies, 'b', label='Train Accuracy')
-    plt.plot(epochs, test_accuracies, 'r', label='Test Accuracy')
-    plt.title('Test Accuracy vs. Epochs')
-    plt.xlabel('Epochs')
-    plt.ylabel('Accuracy')
-    plt.legend()
-
-    plt.tight_layout()
+# 绘制ROC曲线
+def plot_roc_curve(fpr, tpr, roc_auc, path):
+    plt.figure()
+    plt.plot(fpr, tpr, color='darkorange', lw=2, label=f'ROC curve (AUC = {roc_auc:.2f})')
+    plt.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--')
+    plt.xlim([0.0, 1.1])
+    plt.ylim([0.0, 1.1])
+    plt.xlabel('False Positive Rate')
+    plt.ylabel('True Positive Rate')
+    plt.title('Receiver Operating Characteristic')
+    plt.legend(loc="lower right")
     plt.savefig(path)
+    plt.show()
+    plt.close()
 
 # 主函数
 if __name__ == '__main__':
@@ -204,7 +165,7 @@ if __name__ == '__main__':
     train_data, test_data = train_test_split(train_data, test_size=test_size, train_size=train_size, random_state=42)
 
     # 初始化tokenizer
-    tokenizer = BertTokenizer.from_pretrained(model_path)
+    tokenizer = BertTokenizerFast.from_pretrained(model_path)
 
     # 创建数据集
     train_dataset = MyDataset(train_data, topic_data, tokenizer)
@@ -298,17 +259,13 @@ if __name__ == '__main__':
         accuracy = np.mean(np.array(true_labels) == np.array(pred_labels))
         test_accuracies.append(accuracy)
 
-        print(
-            f"Epoch {epoch}/{num_epochs}, Train Loss: {avg_train_loss:.4f}, Train Accuracy: {train_acc * 100:.2f}%, Test Loss: {avg_test_loss:.4f}, Test Accuracy: {accuracy * 100:.2f}%")
-
-        # 阶段输出图像
-        if epoch % draw_step == 0:
-            plot_loss_acc(train_losses, test_losses, test_accuracies, train_accuracies, epoch, path=f'../training_curves/detect/1_null_TextCNN_{epoch}.png')
+        print(f"Epoch {epoch}/{num_epochs}, Train Loss: {avg_train_loss:.4f}, Train Accuracy: {train_acc * 100:.2f}%, Test Loss: {avg_test_loss:.4f}, Test Accuracy: {accuracy * 100:.2f}%")
 
         # 早停机制
         if accuracy > best_accuracy:
             patience = patience_num
             best_accuracy = accuracy
+            torch.save(model.state_dict(), best_model_path)
         else:
             patience -= 1
             if patience == 0:
@@ -317,4 +274,40 @@ if __name__ == '__main__':
 
     end_time = time.time()
     total_training_time = end_time - start_time
-    print(f"Total training time: {total_training_time:.2f} seconds")
+    print(f"Total training time: {total_training_time:.2f} seconds")\
+
+    # 加载最佳模型并绘制ROC曲线
+    model.load_state_dict(torch.load(best_model_path))
+    model.eval()
+
+    true_labels = []
+    pred_probs = []
+    pred_labels = []
+
+    with torch.no_grad():
+        for batch in test_loader:
+            input_ids = batch['input_ids'].to(device)
+            attention_mask = batch['attention_mask'].to(device)
+            labels = batch['label'].to(device)
+
+            logits = model(input_ids, attention_mask)
+            probabilities = torch.softmax(logits, dim=1)
+            pred_probs.extend(probabilities[:, 1].cpu().numpy())
+            preds = torch.argmax(logits, dim=1)
+            pred_labels.extend(preds.cpu().numpy())
+            true_labels.extend(labels.cpu().numpy())
+
+    # 计算ROC和AUC
+    fpr, tpr, _ = roc_curve(true_labels, pred_probs)
+    roc_auc = auc(fpr, tpr)
+
+    # 绘制ROC曲线
+    plot_roc_curve(fpr, tpr, roc_auc, path=f'../../ROC/cnn.png')
+
+    # 计算召回率、F1分数等指标
+    precision, recall, f1, _ = precision_recall_fscore_support(true_labels, pred_labels, average='binary')
+
+    # 输出结果
+    print(f"AUC: {roc_auc:.4f}")
+    print(f"Recall: {recall:.4f}")
+    print(f"F1 Score: {f1:.4f}")
