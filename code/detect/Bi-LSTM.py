@@ -20,45 +20,65 @@ test_size = 0.1
 train_path = '../../data/train.json'
 train_topic_path = '../../data/train_topic.json'
 model_path = '../../bert-base-chinese'
-best_model_path = '../../models/detect/cnn.pth'
+best_model_path = '../../models/detect/bi-lstm.pth'
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(f"device: {device}")
 
 
-# 定义多核TextCNN模块
-class TextCNN(torch.nn.Module):
+# 定义Bi-LSTM模块
+class BiLSTM(torch.nn.Module):
     def __init__(self, hidden_size, num_classes, dropout_prob):
-        super(TextCNN, self).__init__()
-        self.hidden_size = hidden_size
-        # 定义多个不同卷积核大小的卷积层
-        self.conv1 = torch.nn.Sequential(
-            torch.nn.Conv1d(hidden_size, hidden_size, kernel_size=3, padding=1),
-            torch.nn.ReLU(),
+        super(BiLSTM, self).__init__()
+        self.bert = BertModel.from_pretrained(model_path)
+        self.dropout_prob = dropout_prob
+        self.lstm = torch.nn.LSTM(
+            input_size=hidden_size,
+            hidden_size=hidden_size // 2,  # 双向LSTM，隐藏层大小减半
+            num_layers=1,
+            batch_first=True,
+            bidirectional=True
         )
-        self.classifier = torch.nn.Linear(hidden_size, num_classes)
         self.dropout = torch.nn.Dropout(dropout_prob)
-        self.relu = torch.nn.ReLU()
+        self.classifier = torch.nn.Linear(hidden_size, num_classes)
 
     def forward(self, x):
-        x = x.permute(0, 2, 1)
-        out = self.conv1(x)
-        # 全局最大池化，保留最重要的特征
-        out = torch.max(out, dim=-1)[0]
-        logits = self.classifier(out)
-        return logits
+        # lstm_out, _ = self.lstm(x)
+        # # 取最后一个时间步的输出
+        # lstm_out = lstm_out[:, -1, :]
+        # lstm_out = self.dropout(lstm_out)
+        # logits = self.classify(lstm_out)
+        # return logits
+
+        outputs = self.bert(
+            input_ids=input_ids,
+            attention_mask=attention_mask
+        )
+        last_hidden_state = outputs.last_hidden_state
+        lstm_output, (h_n, c_n) = self.lstm(last_hidden_state)
+        pooled_output = h_n.squeeze(0)
+        pooled_output = self.dropout(pooled_output)
+        logits = self.classifier(pooled_output)
+
+        if labels is not None:
+            loss_fct = torch.nn.CrossEntropyLoss()
+            loss = loss_fct(logits.view(-1, self.classifier.out_features), labels.view(-1))
+            return logits, loss
+        else:
+            return logits
+
 
 # 定义封装的模型
 class MyModel(torch.nn.Module):
     def __init__(self, num_labels, dropout_prob):
         super(MyModel, self).__init__()
         self.bert = BertModel.from_pretrained(model_path)
-        self.cnn = TextCNN(
+        self.lstm = BiLSTM(
             self.bert.config.hidden_size,
             num_labels,
             dropout_prob
         )
         self.dropout = torch.nn.Dropout(dropout_prob)
-        self.classifier = torch.nn.Linear(770, num_labels)
+        self.classifier = torch.nn.Linear(self.bert.config.hidden_size, num_labels)
 
         # 冻结 BERT 参数
         for param in self.bert.parameters():
@@ -73,10 +93,10 @@ class MyModel(torch.nn.Module):
 
         # 获取 BERT 的隐藏状态
         hidden_states = outputs.last_hidden_state
-        cnn_features = self.cnn(hidden_states)
+        lstm_features = self.lstm(hidden_states)
 
-        # 合并 BERT 的池化输出和 CNN 的特征
-        pooled_output = torch.cat((pooled_output, cnn_features), dim=1)
+        # 合并 BERT 的池化输出和 LSTM 的特征
+        pooled_output = torch.cat((pooled_output, lstm_features), dim=1)
         pooled_output = self.dropout(pooled_output)
 
         logits = self.classifier(pooled_output)
@@ -302,7 +322,7 @@ if __name__ == '__main__':
     roc_auc = auc(fpr, tpr)
 
     # 绘制ROC曲线
-    plot_roc_curve(fpr, tpr, roc_auc, path=f'../../ROC/cnn.png')
+    plot_roc_curve(fpr, tpr, roc_auc, path=f'../../ROC/bi-lstm.png')
 
     # 计算召回率、F1分数等指标
     precision, recall, f1, _ = precision_recall_fscore_support(true_labels, pred_labels, average='binary')
