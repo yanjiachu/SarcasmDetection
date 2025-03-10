@@ -25,7 +25,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(f"device: {device}")
 
 
-# 定义多核TextCNN模块
+# 定义TextCNN模块
 class TextCNN(torch.nn.Module):
     def __init__(self, hidden_size, num_classes, dropout_prob):
         super(TextCNN, self).__init__()

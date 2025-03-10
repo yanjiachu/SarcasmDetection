@@ -20,7 +20,7 @@ train_path = '../../data/train.json'
 train_topic_path = '../../data/train_topic.json'
 model_path = '../../bert-base-chinese'
 # model_path = '../../chinese-macbert-base'
-best_model_path = '../../models/detect/mynet_bert_2.pth'
+best_model_path = '../../models/detect/mynet_bert_4.pth'
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(f"device: {device}")
 
@@ -30,34 +30,49 @@ class MyModel(torch.nn.Module):
         super(MyModel, self).__init__()
         self.bert = BertModel.from_pretrained(model_path)
         self.dropout = torch.nn.Dropout(dropout_prob)
-        self.diff_layer = torch.nn.Sequential(
-            torch.nn.Linear(768 * 2, 256),
+        # self.diff_layer = torch.nn.Sequential(
+        #     torch.nn.Linear(768 * 2, 256),
+        #     torch.nn.ReLU(),
+        #     torch.nn.Dropout(dropout_prob),
+        #     torch.nn.Linear(256, num_labels)
+        # )
+        self.cnn1 = torch.nn.Sequential(
+            torch.nn.Conv1d(768, 256, kernel_size=3, padding=1),
             torch.nn.ReLU(),
             torch.nn.Dropout(dropout_prob),
             torch.nn.Linear(256, num_labels)
         )
+        self.cnn2 = torch.nn.Sequential(
+            torch.nn.Conv1d(768, 256, kernel_size=3, padding=1),
+            torch.nn.ReLU(),
+            torch.nn.Dropout(dropout_prob),
+            torch.nn.Linear(256, num_labels)
+        )
+        self.classifier = torch.nn.Linear(256 * 2, num_labels)
         # 冻结参数
         for param in self.bert.parameters():
             param.requires_grad = False
 
     def forward(self, comment_input_ids, comment_attention_mask, context_input_ids, context_attention_mask, labels=None):
-        # 通道1：独立评论编码
         comment_outputs = self.bert(
             input_ids=comment_input_ids,
             attention_mask=comment_attention_mask
         )
-        comment_cls = comment_outputs.last_hidden_state[:, 0, :]  # [CLS]
-
-        # 通道2：上下文编码
+        comment_cls = comment_outputs.last_hidden_state[:, 0, :]
         context_outputs = self.bert(
             input_ids=context_input_ids,
             attention_mask=context_attention_mask
         )
-        context_cls = context_outputs.last_hidden_state[:, 0, :]  # [CLS]
+        context_cls = context_outputs.last_hidden_state[:, 0, :]
 
-        # 差异融合
-        combined = torch.cat([comment_cls, context_cls], dim=1)
-        logits = self.diff_layer(combined)
+        # combined = torch.cat([comment_cls, context_cls], dim=1)
+        # logits = self.diff_layer(combined)
+
+        comment_cnn_out = self.cnn1(comment_cls.unsqueeze(2)).squeeze(2)
+        context_cnn_out = self.cnn2(context_cls.unsqueeze(2)).squeeze(2)
+        combined = torch.cat([comment_cnn_out, context_cnn_out], dim=1)
+
+        logits = self.classifier(combined)
 
         if labels is not None:
             loss_fct = torch.nn.CrossEntropyLoss()
@@ -127,29 +142,6 @@ def load_topic_data(file_path):
         data = json.load(f)
     topic_dict = {item['topicId']: item for item in data}
     return topic_dict
-
-def plot_loss_acc(train_losses, test_losses, train_accuracies, test_accuracies, epoch, path):
-    epochs = range(1, epoch + 1)
-    plt.figure(figsize=(12, 4))
-
-    plt.subplot(1, 2, 1)
-    plt.plot(epochs, train_losses, 'b', label='Training Loss')
-    plt.plot(epochs, test_losses, 'r', label='Test Loss')
-    plt.title('Training Loss vs. Epochs')
-    plt.xlabel('Epochs')
-    plt.ylabel('Loss')
-    plt.legend()
-
-    plt.subplot(1, 2, 2)
-    plt.plot(epochs, train_accuracies, 'b', label='Train Accuracy')
-    plt.plot(epochs, test_accuracies, 'r', label='Test Accuracy')
-    plt.title('Test Accuracy vs. Epochs')
-    plt.xlabel('Epochs')
-    plt.ylabel('Accuracy')
-    plt.legend()
-
-    plt.tight_layout()
-    plt.savefig(path)
 
 # 绘制ROC曲线
 def plot_roc_curve(fpr, tpr, roc_auc, path):
@@ -281,19 +273,6 @@ if __name__ == '__main__':
               f"Test Loss: {avg_test_loss:.4f}, "
               f"Test Acc: {test_accuracy * 100:.2f}%")
 
-        # with open(f'../logs/detect/mynet_{num_epochs}.txt', 'a') as f:
-        #     f.write(f"Epoch {epoch}/{num_epochs}, "
-        #             f"Train Loss: {avg_train_loss:.4f}, "
-        #             f"Train Acc: {train_accuracy * 100:.2f}%, "
-        #             f"Test Loss: {avg_test_loss:.4f}, "
-        #             f"Test Acc: {test_accuracy * 100:.2f}%\n")
-
-        # 阶段输出图像
-        # if epoch % draw_step == 0:
-        #     plot_loss_acc(train_losses, test_losses, train_accuracies, test_accuracies, epoch,
-        #         path=f'../training_curves/detect/mynet_{epoch}.png'
-        #     )
-
         # 早停机制
         if test_accuracy > best_accuracy:
             patience = patience_num
@@ -303,15 +282,11 @@ if __name__ == '__main__':
             patience -= 1
             if patience == 0:
                 print("Early stopping!")
-                # with open(f'../../logs/detect/mynet_{num_epochs}.txt', 'a') as f:
-                #     f.write("Early stopping!\n")
                 break
 
     end_time = time.time()
     total_training_time = end_time - start_time
     print(f"Total training time: {total_training_time:.2f} seconds")
-    # with open(f'../../logs/detect/mynet_{num_epochs}.txt', 'a') as f:
-    #     f.write(f"Total training time: {total_training_time:.2f} seconds\n\n")
 
 
     # 加载最佳模型并评估
@@ -343,7 +318,7 @@ if __name__ == '__main__':
     fpr, tpr, _ = roc_curve(true_labels, pred_probs)
     roc_auc = auc(fpr, tpr)
 
-    plot_roc_curve(fpr, tpr, roc_auc, path=f'../../ROC/1_mynet.png')
+    plot_roc_curve(fpr, tpr, roc_auc, path=f'../../ROC/mynet_4.png')
 
     # 计算召回率、F1分数等指标
     precision, recall, f1, _ = precision_recall_fscore_support(true_labels, pred_labels, average='binary')
@@ -353,9 +328,3 @@ if __name__ == '__main__':
     print(f"AUC: {roc_auc:.4f}")
     print(f"Recall: {recall:.4f}")
     print(f"F1 Score: {f1:.4f}")
-
-    # 写入日志
-    # with open(f'../logs/detect/mynet_{num_epochs}.txt', 'a') as f:
-    #     f.write(f"AUC: {roc_auc:.4f}\n")
-    #     f.write(f"Recall: {recall:.4f}\n")
-    #     f.write(f"F1 Score: {f1:.4f}\n")
