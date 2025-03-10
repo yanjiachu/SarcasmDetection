@@ -8,7 +8,6 @@ from transformers import BertModel, BertTokenizerFast
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import roc_curve, auc, precision_recall_fscore_support
 
-
 # 定义超参数
 batch_size = 16
 learning_rate = 5e-5
@@ -24,16 +23,16 @@ best_model_path = '../../models/detect/bi-lstm.pth'
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(f"device: {device}")
 
-
 # 定义Bi-LSTM模块
 class BiLSTM(torch.nn.Module):
     def __init__(self, hidden_size, num_classes, dropout_prob):
         super(BiLSTM, self).__init__()
-        self.bert = BertModel.from_pretrained(model_path)
+        self.hidden_size = hidden_size
+        self.num_classes = num_classes
         self.dropout_prob = dropout_prob
         self.lstm = torch.nn.LSTM(
             input_size=hidden_size,
-            hidden_size=hidden_size // 2,  # 双向LSTM，隐藏层大小减半
+            hidden_size=hidden_size // 2,  # 因为是双向 LSTM，隐藏层大小减半
             num_layers=1,
             batch_first=True,
             bidirectional=True
@@ -42,68 +41,41 @@ class BiLSTM(torch.nn.Module):
         self.classifier = torch.nn.Linear(hidden_size, num_classes)
 
     def forward(self, x):
-        # lstm_out, _ = self.lstm(x)
-        # # 取最后一个时间步的输出
-        # lstm_out = lstm_out[:, -1, :]
-        # lstm_out = self.dropout(lstm_out)
-        # logits = self.classify(lstm_out)
-        # return logits
-
-        outputs = self.bert(
-            input_ids=input_ids,
-            attention_mask=attention_mask
-        )
-        last_hidden_state = outputs.last_hidden_state
-        lstm_output, (h_n, c_n) = self.lstm(last_hidden_state)
-        pooled_output = h_n.squeeze(0)
-        pooled_output = self.dropout(pooled_output)
-        logits = self.classifier(pooled_output)
-
-        if labels is not None:
-            loss_fct = torch.nn.CrossEntropyLoss()
-            loss = loss_fct(logits.view(-1, self.classifier.out_features), labels.view(-1))
-            return logits, loss
-        else:
-            return logits
-
+        lstm_out, _ = self.lstm(x)
+        lstm_out = lstm_out[:, -1, :]
+        lstm_out = self.dropout(lstm_out)
+        logits = self.classifier(lstm_out)
+        return logits
 
 # 定义封装的模型
 class MyModel(torch.nn.Module):
     def __init__(self, num_labels, dropout_prob):
         super(MyModel, self).__init__()
         self.bert = BertModel.from_pretrained(model_path)
-        self.lstm = BiLSTM(
+        self.bilstm = BiLSTM(
             self.bert.config.hidden_size,
             num_labels,
             dropout_prob
         )
         self.dropout = torch.nn.Dropout(dropout_prob)
-        self.classifier = torch.nn.Linear(self.bert.config.hidden_size, num_labels)
 
         # 冻结 BERT 参数
         for param in self.bert.parameters():
             param.requires_grad = False
 
     def forward(self, input_ids, attention_mask, labels=None):
+        # 获取 BERT 的输出
         outputs = self.bert(
             input_ids=input_ids,
             attention_mask=attention_mask
         )
-        pooled_output = outputs.pooler_output
-
-        # 获取 BERT 的隐藏状态
         hidden_states = outputs.last_hidden_state
-        lstm_features = self.lstm(hidden_states)
-
-        # 合并 BERT 的池化输出和 LSTM 的特征
-        pooled_output = torch.cat((pooled_output, lstm_features), dim=1)
-        pooled_output = self.dropout(pooled_output)
-
-        logits = self.classifier(pooled_output)
+        lstm_output = self.bilstm(hidden_states)
+        logits = lstm_output
 
         if labels is not None:
             loss_fct = torch.nn.CrossEntropyLoss()
-            loss = loss_fct(logits.view(-1, self.classifier.out_features), labels.view(-1))
+            loss = loss_fct(logits.view(-1, self.bilstm.classifier.out_features), labels.view(-1))
             return logits, loss
         else:
             return logits
@@ -130,7 +102,7 @@ class MyDataset(Dataset):
         topic_text_content = topic_content.get('topicContent', '')
 
         # 拼接评论和话题内容
-        input_text = f"{review} [SEP] {topic_title} {topic_text_content}"
+        input_text = f"{review} [SEP] {topic_title}"
 
         # 使用BERT tokenizer编码
         encoding = self.tokenizer(

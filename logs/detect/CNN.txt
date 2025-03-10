@@ -51,5 +51,3 @@ Early stopping!
 AUC: 0.8436
 Recall: 0.8513
 F1 Score: 0.8451
-
-review:

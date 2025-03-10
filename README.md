@@ -1,30 +1,5 @@
 # 中文讽刺识别
 
-[//]: # (代码会上传至kaggle，无需配置，可直接点击运行。)
-
-[//]: # ()
-[//]: # (notebook链接:)
-
-[//]: # ()
-[//]: # ([baseline]&#40;https://www.kaggle.com/code/jiachuyan/sarcasmdetection-chinese&#41;)
-
-[//]: # (（三个baseline）)
-
-[//]: # ()
-[//]: # ([detect]&#40;https://www.kaggle.com/code/jiachuyan/sarcasm-detect&#41;)
-
-[//]: # (（讽刺识别任务）)
-
-[//]: # ()
-[//]: # ([classify]&#40;https://www.kaggle.com/code/jiachuyan/sarcasm-classify&#41;)
-
-[//]: # (（讽刺分类任务）)
-
-[//]: # ()
-[//]: # ([identify]&#40;https://www.kaggle.com/code/jiachuyan/sarcasm-identify&#41;)
-
-[//]: # (（讽刺目标识别任务）)
-
 ## 项目内容
 
 ### 1. 讽刺识别：
