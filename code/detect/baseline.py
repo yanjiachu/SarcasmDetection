@@ -246,19 +246,6 @@ if __name__ == '__main__':
               f"Train Acc: {train_accuracy * 100:.2f}%, "
               f"Test Loss: {avg_test_loss:.4f}, "
               f"Test Acc: {test_accuracy * 100:.2f}%")
-        # 写入日志
-        with open(f'../logs/detect/1_all_Linear_{num_epochs}.txt', 'a') as f:
-            f.write(f"Epoch {epoch}/{num_epochs}, "
-                    f"Train Loss: {avg_train_loss:.4f}, "
-                    f"Train Acc: {train_accuracy * 100:.2f}%, "
-                    f"Test Loss: {avg_test_loss:.4f}, "
-                    f"Test Acc: {test_accuracy * 100:.2f}%\n")
-
-        # 阶段输出图像
-        if epoch % draw_step == 0:
-            plot_loss_acc(train_losses, test_losses, train_accuracies, test_accuracies, epoch,
-                path=f'../training_curves/detect/1_all_Linear_{epoch}.png'
-            )
 
         # 早停机制
         if test_accuracy > best_accuracy:
@@ -269,15 +256,11 @@ if __name__ == '__main__':
             patience -= 1
             if patience == 0:
                 print("Early stopping!")
-                with open(f'../logs/detect/1_all_Linear_{num_epochs}.txt', 'a') as f:
-                    f.write("Early stopping!\n")
                 break
 
     end_time = time.time()
     total_training_time = end_time - start_time
     print(f"Total training time: {total_training_time:.2f} seconds")
-    with open(f'../logs/detect/1_all_Linear_{num_epochs}.txt', 'a') as f:
-        f.write(f"Total training time: {total_training_time:.2f} seconds\n")
 
     # 加载最佳模型并绘制ROC曲线
     model.load_state_dict(torch.load(best_model_path))

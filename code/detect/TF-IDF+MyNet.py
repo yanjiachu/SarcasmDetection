@@ -14,29 +14,33 @@ train_size = 0.9
 test_size = 0.1
 train_path = '../../data/train.json'
 train_topic_path = '../../data/train_topic.json'
-best_model_path = '../../models/detect/textcnn.pth'
+best_model_path = '../../models/detect/bi-lstm.pth'
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(f"device: {device}")
 
-# 定义 TextCNN 模型
-class TextCNN(torch.nn.Module):
-    def __init__(self, input_size, num_classes):
-        super(TextCNN, self).__init__()
-        self.conv = torch.nn.Conv1d(in_channels=input_size, out_channels=256, kernel_size=5, padding=2)
-        self.pool = torch.nn.AdaptiveMaxPool1d(1)
+class MyNet(torch.nn.Module):
+    def __init__(self, input_size, hidden_size, num_classes, dropout_prob):
+        super(MyNet, self).__init__()
+        self.hidden_size = hidden_size
+        self.num_classes = num_classes
+        self.dropout_prob = dropout_prob
+        self.lstm = torch.nn.LSTM(
+            input_size=input_size,
+            hidden_size=hidden_size // 2,
+            num_layers=1,
+            batch_first=True,
+            bidirectional=True
+        )
         self.dropout = torch.nn.Dropout(dropout_prob)
-        self.relu = torch.nn.ReLU()
-        self.fc = torch.nn.Linear(256, 128)
-        self.classify = torch.nn.Linear(128, num_classes)
+        self.classifier = torch.nn.Linear(hidden_size, num_classes)
 
     def forward(self, x):
-        x = x.unsqueeze(2)  # 调整输入形状为 (batch_size, input_size, 1)
-        x = self.pool(torch.relu(self.conv(x))).squeeze(2)
-        x = self.fc(x)
-        x = self.relu(x)
-        x = self.dropout(x)
-        x = self.classify(x)
-        return x
+        x = x.unsqueeze(1)
+        lstm_out, _ = self.lstm(x)
+        lstm_out = lstm_out[:, -1, :]
+        lstm_out = self.dropout(lstm_out)
+        logits = self.classifier(lstm_out)
+        return logits
 
 # 定义数据集类
 class MyDataset(Dataset):
@@ -61,6 +65,7 @@ class MyDataset(Dataset):
 
         # 拼接评论和话题内容
         # input_text = f"{review} {topic_text_content}"
+        # input_text = f"{review} {topic_title}"
         input_text = f"{review} {topic_title} {topic_text_content}"
 
         # 使用 TF-IDF 向量化
@@ -166,7 +171,7 @@ if __name__ == '__main__':
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
 
-    model = TextCNN(input_size=4096, num_classes=2).to(device)
+    model = MyNet(input_size=4096, hidden_size=256, num_classes=2,dropout_prob=dropout_prob).to(device)
 
     # 损失函数和优化器
     criterion = torch.nn.CrossEntropyLoss()
