@@ -62,3 +62,26 @@ Epoch 3/30, Train Loss: 0.3353, Train Acc: 85.90%, Test Loss: 0.5171, Test Acc: 
 AUC: 0.8338
 Recall: 0.8975
 F1 Score: 0.8440
+
+model_4:
+review + title
+Epoch 1/30, Train Loss: 0.5471, Train Acc: 71.89%, Test Loss: 0.5183, Test Acc: 74.28%
+Epoch 2/30, Train Loss: 0.5090, Train Acc: 74.74%, Test Loss: 0.5008, Test Acc: 75.30%
+Epoch 3/30, Train Loss: 0.4992, Train Acc: 75.27%, Test Loss: 0.5023, Test Acc: 74.83%
+Epoch 4/30, Train Loss: 0.4901, Train Acc: 75.75%, Test Loss: 0.4927, Test Acc: 75.81%
+Epoch 5/30, Train Loss: 0.4809, Train Acc: 76.44%, Test Loss: 0.4958, Test Acc: 74.62%
+Epoch 6/30, Train Loss: 0.4747, Train Acc: 76.75%, Test Loss: 0.4900, Test Acc: 75.72%
+Epoch 7/30, Train Loss: 0.4664, Train Acc: 77.12%, Test Loss: 0.4843, Test Acc: 76.95%
+Epoch 8/30, Train Loss: 0.4598, Train Acc: 77.74%, Test Loss: 0.4836, Test Acc: 76.31%
+Epoch 9/30, Train Loss: 0.4527, Train Acc: 78.52%, Test Loss: 0.4794, Test Acc: 77.16%
+Epoch 10/30, Train Loss: 0.4449, Train Acc: 78.68%, Test Loss: 0.4857, Test Acc: 76.86%
+Epoch 11/30, Train Loss: 0.4358, Train Acc: 79.45%, Test Loss: 0.4822, Test Acc: 76.36%
+Epoch 12/30, Train Loss: 0.4278, Train Acc: 79.67%, Test Loss: 0.4762, Test Acc: 77.84%
+Epoch 13/30, Train Loss: 0.4207, Train Acc: 80.46%, Test Loss: 0.4750, Test Acc: 77.50%
+Epoch 14/30, Train Loss: 0.4096, Train Acc: 81.01%, Test Loss: 0.4764, Test Acc: 77.84%
+Epoch 15/30, Train Loss: 0.4013, Train Acc: 81.26%, Test Loss: 0.4822, Test Acc: 77.08%
+Early stopping!
+
+AUC: 0.8231
+Recall: 0.8665
+F1 Score: 0.8396

@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader, Dataset
 from transformers import BertModel, BertTokenizerFast
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import roc_curve, auc, precision_recall_fscore_support, classification_report
+from sklearn.metrics import roc_curve, auc, precision_recall_fscore_support
 
 # 定义超参数
 batch_size = 16
@@ -91,7 +91,8 @@ class MyDataset(Dataset):
         topic_text_content = topic_content.get('topicContent', '')
 
         # 拼接评论和话题内容
-        input_text = f"{review} [SEP] {topic_title} {topic_text_content}"
+        # input_text = f"{review} [SEP] {topic_title} {topic_text_content}"
+        input_text = review
 
         # 使用BERT tokenizer编码
         encoding = self.tokenizer(
@@ -121,37 +122,13 @@ def load_topic_data(file_path):
     topic_dict = {item['topicId']: item for item in data}
     return topic_dict
 
-
-def plot_loss_acc(train_losses, test_losses, train_accuracies, test_accuracies, epoch, path):
-    epochs = range(1, epoch + 1)
-    plt.figure(figsize=(12, 4))
-
-    plt.subplot(1, 2, 1)
-    plt.plot(epochs, train_losses, 'b', label='Training Loss')
-    plt.plot(epochs, test_losses, 'r', label='Test Loss')
-    plt.title('Training Loss vs. Epochs')
-    plt.xlabel('Epochs')
-    plt.ylabel('Loss')
-    plt.legend()
-
-    plt.subplot(1, 2, 2)
-    plt.plot(epochs, train_accuracies, 'b', label='Train Accuracy')
-    plt.plot(epochs, test_accuracies, 'r', label='Test Accuracy')
-    plt.title('Test Accuracy vs. Epochs')
-    plt.xlabel('Epochs')
-    plt.ylabel('Accuracy')
-    plt.legend()
-
-    plt.tight_layout()
-    plt.savefig(path)
-
 # 绘制ROC曲线
 def plot_roc_curve(fpr, tpr, roc_auc, path):
     plt.figure()
     plt.plot(fpr, tpr, color='darkorange', lw=2, label=f'ROC curve (AUC = {roc_auc:.2f})')
     plt.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--')
-    plt.xlim([0.0, 1.0])
-    plt.ylim([0.0, 1.0])
+    plt.xlim([0.0, 1.1])
+    plt.ylim([0.0, 1.1])
     plt.xlabel('False Positive Rate')
     plt.ylabel('True Positive Rate')
     plt.title('Receiver Operating Characteristic')
@@ -332,11 +309,9 @@ if __name__ == '__main__':
 
     # 计算召回率、F1分数等指标
     precision, recall, f1, _ = precision_recall_fscore_support(true_labels, pred_labels, average='binary')
-    classification_rep = classification_report(true_labels, pred_labels, target_names=['Non-Sarcastic', 'Sarcastic'])
 
     # 输出结果
     print(f"AUC: {roc_auc:.4f}")
+    print(f"Precision: {precision:.4f}")
     print(f"Recall: {recall:.4f}")
     print(f"F1 Score: {f1:.4f}")
-    print("Classification Report:")
-    print(classification_rep)

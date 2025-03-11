@@ -51,3 +51,17 @@ Early stopping!
 AUC: 0.8436
 Recall: 0.8513
 F1 Score: 0.8451
+
+
+bert解开：
+Epoch 1/30, Train Loss: 0.5380, Train Accuracy: 72.95%, Test Loss: 0.4599, Test Accuracy: 77.84%
+Epoch 2/30, Train Loss: 0.4262, Train Accuracy: 80.79%, Test Loss: 0.4505, Test Accuracy: 78.22%
+Epoch 3/30, Train Loss: 0.3118, Train Accuracy: 86.95%, Test Loss: 0.4914, Test Accuracy: 78.69%
+Epoch 4/30, Train Loss: 0.2071, Train Accuracy: 91.83%, Test Loss: 0.6593, Test Accuracy: 77.92%
+Epoch 5/30, Train Loss: 0.1626, Train Accuracy: 93.48%, Test Loss: 0.8006, Test Accuracy: 78.47%
+Epoch 6/30, Train Loss: 0.1113, Train Accuracy: 96.05%, Test Loss: 0.7448, Test Accuracy: 77.33%
+Early stopping!
+
+AUC: 0.8486
+Recall: 0.8342
+F1 Score: 0.8398

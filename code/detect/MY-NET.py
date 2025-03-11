@@ -5,12 +5,12 @@ import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader, Dataset
 from transformers import BertModel, BertTokenizerFast
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import roc_curve, auc, precision_recall_fscore_support, classification_report
+from sklearn.metrics import roc_curve, auc, precision_recall_fscore_support
 
 # 定义超参数
-batch_size = 32
-learning_rate = 1e-4
-dropout_prob = 0.2
+batch_size = 16
+learning_rate = 5e-5
+dropout_prob = 0.1
 patience_num = 3    # 早停阈值
 draw_step = 3       # 绘制loss和acc的图像的间隔
 num_epochs = 30
@@ -30,26 +30,30 @@ class MyModel(torch.nn.Module):
         super(MyModel, self).__init__()
         self.bert = BertModel.from_pretrained(model_path)
         self.dropout = torch.nn.Dropout(dropout_prob)
-        # self.diff_layer = torch.nn.Sequential(
-        #     torch.nn.Linear(768 * 2, 256),
-        #     torch.nn.ReLU(),
-        #     torch.nn.Dropout(dropout_prob),
-        #     torch.nn.Linear(256, num_labels)
-        # )
-        self.cnn1 = torch.nn.Sequential(
+
+        # 定义评论和内容的CNN
+        self.cnn_comment = torch.nn.Sequential(
             torch.nn.Conv1d(768, 256, kernel_size=3, padding=1),
             torch.nn.ReLU(),
-            torch.nn.Dropout(dropout_prob),
-            torch.nn.Linear(256, num_labels)
+            torch.nn.MaxPool1d(kernel_size=2, stride=2),
+            torch.nn.Dropout(dropout_prob)
         )
-        self.cnn2 = torch.nn.Sequential(
+        self.cnn_context = torch.nn.Sequential(
             torch.nn.Conv1d(768, 256, kernel_size=3, padding=1),
             torch.nn.ReLU(),
-            torch.nn.Dropout(dropout_prob),
-            torch.nn.Linear(256, num_labels)
+            torch.nn.MaxPool1d(kernel_size=2, stride=2),
+            torch.nn.Dropout(dropout_prob)
         )
-        self.classifier = torch.nn.Linear(256 * 2, num_labels)
-        # 冻结参数
+
+        # 定义分类层
+        self.classifier = torch.nn.Sequential(
+            torch.nn.Linear(256 * 2, 128),
+            torch.nn.ReLU(),
+            torch.nn.Dropout(dropout_prob),
+            torch.nn.Linear(128, num_labels)
+        )
+
+        # 冻结BERT参数
         for param in self.bert.parameters():
             param.requires_grad = False
 
@@ -58,20 +62,27 @@ class MyModel(torch.nn.Module):
             input_ids=comment_input_ids,
             attention_mask=comment_attention_mask
         )
-        comment_cls = comment_outputs.last_hidden_state[:, 0, :]
+        comment_embeddings = comment_outputs.last_hidden_state
+
         context_outputs = self.bert(
             input_ids=context_input_ids,
             attention_mask=context_attention_mask
         )
-        context_cls = context_outputs.last_hidden_state[:, 0, :]
+        context_embeddings = context_outputs.last_hidden_state
 
-        # combined = torch.cat([comment_cls, context_cls], dim=1)
-        # logits = self.diff_layer(combined)
+        # 将BERT输出通过CNN处理
+        comment_embeddings = comment_embeddings.permute(0, 2, 1)
+        comment_cnn_out = self.cnn_comment(comment_embeddings)
+        comment_cnn_out = torch.mean(comment_cnn_out, dim=2)
 
-        comment_cnn_out = self.cnn1(comment_cls.unsqueeze(2)).squeeze(2)
-        context_cnn_out = self.cnn2(context_cls.unsqueeze(2)).squeeze(2)
+        context_embeddings = context_embeddings.permute(0, 2, 1)
+        context_cnn_out = self.cnn_context(context_embeddings)
+        context_cnn_out = torch.mean(context_cnn_out, dim=2)
+
+        # 拼接评论和内容的CNN输出
         combined = torch.cat([comment_cnn_out, context_cnn_out], dim=1)
 
+        # 通过分类层
         logits = self.classifier(combined)
 
         if labels is not None:
@@ -104,7 +115,8 @@ class SarcasmDataset(Dataset):
 
         # 构造双通道输入
         comment_input = review
-        context_input = f"{topic_title} [SEP] {topic_text_content}"
+        # context_input = f"{topic_title} [SEP] {topic_text_content}"
+        context_input = topic_title
 
         # 编码
         comment_encoding = self.tokenizer(
@@ -154,7 +166,7 @@ def plot_roc_curve(fpr, tpr, roc_auc, path):
     plt.ylabel('True Positive Rate')
     plt.title('Receiver Operating Characteristic')
     plt.legend(loc="lower right")
-    # plt.savefig(path)
+    plt.savefig(path)
     plt.show()
     plt.close()
 
@@ -227,11 +239,7 @@ if __name__ == '__main__':
             total_samples += labels.size(0)
 
         avg_train_loss = total_loss / len(train_loader)
-        train_losses.append(avg_train_loss)
-
-        # 计算并保存训练精度
         train_accuracy = total_correct / total_samples
-        train_accuracies.append(train_accuracy)
 
         # 测试阶段
         model.eval()
@@ -260,11 +268,7 @@ if __name__ == '__main__':
 
         # 计算并保存测试精度
         test_accuracy = total_test_correct / total_test_samples
-        test_accuracies.append(test_accuracy)
-
-        # 计算并保存测试损失
         avg_test_loss = total_test_loss / len(test_loader)
-        test_losses.append(avg_test_loss)
 
         # 打印结果
         print(f"Epoch {epoch}/{num_epochs}, "
@@ -322,7 +326,6 @@ if __name__ == '__main__':
 
     # 计算召回率、F1分数等指标
     precision, recall, f1, _ = precision_recall_fscore_support(true_labels, pred_labels, average='binary')
-    classification_rep = classification_report(true_labels, pred_labels, target_names=['Non-Sarcastic', 'Sarcastic'])
 
     # 输出结果
     print(f"AUC: {roc_auc:.4f}")

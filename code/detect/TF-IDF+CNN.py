@@ -3,17 +3,18 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.model_selection import train_test_split
+from sklearn.metrics import roc_curve, auc, precision_recall_fscore_support
 
 # 定义超参数
 batch_size = 32
 learning_rate = 1e-3
-dropout_prob = 0.1
-num_epochs = 100
+dropout_prob = 0.05
+num_epochs = 50
 train_size = 0.9
 test_size = 0.1
 train_path = '../../data/train.json'
 train_topic_path = '../../data/train_topic.json'
-best_model_path = '../../models/detect/cnn.pth'
+best_model_path = '../../models/detect/textcnn.pth'
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(f"device: {device}")
 
@@ -21,7 +22,7 @@ print(f"device: {device}")
 class TextCNN(torch.nn.Module):
     def __init__(self, input_size, num_classes):
         super(TextCNN, self).__init__()
-        self.conv = torch.nn.Conv1d(in_channels=1, out_channels=256, kernel_size=5)
+        self.conv = torch.nn.Conv1d(in_channels=input_size, out_channels=256, kernel_size=5, padding=2)
         self.pool = torch.nn.AdaptiveMaxPool1d(1)
         self.dropout = torch.nn.Dropout(dropout_prob)
         self.relu = torch.nn.ReLU()
@@ -29,7 +30,7 @@ class TextCNN(torch.nn.Module):
         self.classify = torch.nn.Linear(128, num_classes)
 
     def forward(self, x):
-        x = x.unsqueeze(1)
+        x = x.unsqueeze(2)  # 调整输入形状为 (batch_size, input_size, 1)
         x = self.pool(torch.relu(self.conv(x))).squeeze(2)
         x = self.fc(x)
         x = self.relu(x)
@@ -59,7 +60,7 @@ class MyDataset(Dataset):
         topic_text_content = topic_content.get('topicContent', '')
 
         # 拼接评论和话题内容
-        input_text = f"{review} {topic_text_content}"
+        input_text = f"{review} {topic_title}"
 
         # 使用 TF-IDF 向量化
         input_vector = self.tfidf_vectorizer.transform([input_text]).toarray()[0]
@@ -133,24 +134,24 @@ def eval(model, dataloader, criterion):
 
 if __name__ == '__main__':
     # 加载数据
-    train_data = load_data_dev(train_path)
+    data = load_data_dev(train_path)
     topic_dict = load_topic_data(train_topic_path)
 
     # 划分训练集和验证集
-    train_data, test_data = train_test_split(train_data, test_size=test_size, train_size=train_size, random_state=42)
+    train_data, test_data = train_test_split(data, test_size=test_size, train_size=train_size, random_state=42)
 
     # 初始化 TF-IDF 向量化器
-    tfidf_vectorizer = TfidfVectorizer(max_features=5000)
+    tfidf_vectorizer = TfidfVectorizer(max_features=4096)
 
     # 准备 TF-IDF 向量化器的训练数据
     texts = []
-    for item in train_data:
+    for item in data:
         topic_id = item['topicId']
         review = item['review']
         topic_content = topic_dict.get(topic_id, {})
         topic_title = topic_content.get('topicTitle', '')
         topic_text_content = topic_content.get('topicContent', '')
-        input_text = f"{review} {topic_text_content}"
+        input_text = f"{review} {topic_title}"
         texts.append(input_text)
 
     # 拟合 TF-IDF 向量化器
@@ -164,20 +165,55 @@ if __name__ == '__main__':
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
 
-    model = TextCNN(input_size=5000, num_classes=2).to(device)
+    model = TextCNN(input_size=4096, num_classes=2).to(device)
 
     # 损失函数和优化器
     criterion = torch.nn.CrossEntropyLoss()
-    # optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
-    # optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, betas=(0.9, 0.99), eps=1e-8)
-    optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate, momentum=0.9)
+    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
     # 训练和验证
-    for epoch in range(1, num_epochs + 1):
-        avg_train_loss, train_accuracy = train(model, train_loader, criterion, optimizer)
-        avg_test_loss, test_accuracy = eval(model, test_loader, criterion)
-        print(f"Epoch {epoch}/{num_epochs}, "
-              f"Train Loss: {avg_train_loss:.4f}, "
-              f"Train Acc: {train_accuracy * 100:.2f}%, "
-              f"Test Loss: {avg_test_loss:.4f}, "
-              f"Test Acc: {test_accuracy * 100:.2f}%")
+    # best_test_accuracy = 0.0
+    # for epoch in range(1, num_epochs + 1):
+    #     avg_train_loss, train_accuracy = train(model, train_loader, criterion, optimizer)
+    #     avg_test_loss, test_accuracy = eval(model, test_loader, criterion)
+    #     print(f"Epoch {epoch}/{num_epochs}, "
+    #           f"Train Loss: {avg_train_loss:.4f}, "
+    #           f"Train Acc: {train_accuracy * 100:.2f}%, "
+    #           f"Test Loss: {avg_test_loss:.4f}, "
+    #           f"Test Acc: {test_accuracy * 100:.2f}%")
+    #
+    #     # 保存最佳模型
+    #     if test_accuracy > best_test_accuracy:
+    #         best_test_accuracy = test_accuracy
+    #         torch.save(model.state_dict(), best_model_path)
+
+    # 加载最佳模型并绘制ROC曲线
+    model.load_state_dict(torch.load(best_model_path))
+    model.eval()
+
+    true_labels = []
+    pred_probs = []
+    pred_labels = []
+
+    with torch.no_grad():
+        for batch in test_loader:
+            input_vector = batch['input_vector'].to(device)
+            labels = batch['label'].to(device)
+
+            logits = model(input_vector)
+            probabilities = torch.softmax(logits, dim=1)
+            pred_probs.extend(probabilities[:, 1].cpu().numpy())
+            preds = torch.argmax(logits, dim=1)
+            pred_labels.extend(preds.cpu().numpy())
+            true_labels.extend(labels.cpu().numpy())
+
+    # 计算ROC和AUC
+    fpr, tpr, _ = roc_curve(true_labels, pred_probs)
+    roc_auc = auc(fpr, tpr)
+
+    # 计算召回率、F1分数等指标
+    precision, recall, f1, _ = precision_recall_fscore_support(true_labels, pred_labels, average='binary')
+    print(f"AUC: {roc_auc:.4f}")
+    print(f"Precision: {precision:.4f}")
+    print(f"Recall: {recall:.4f}")
+    print(f"F1 Score: {f1:.4f}")
