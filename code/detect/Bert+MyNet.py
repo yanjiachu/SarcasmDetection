@@ -1,6 +1,7 @@
 import json
 import torch
 import time
+import numpy as np
 import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader, Dataset
 from transformers import BertModel, BertTokenizerFast
@@ -18,82 +19,100 @@ train_size = 0.9
 test_size = 0.1
 train_path = '../../data/train.json'
 train_topic_path = '../../data/train_topic.json'
-model_path = '../../bert-base-chinese'
-# model_path = '../../chinese-macbert-base'
-best_model_path = '../../models/detect/mynet_bert_4.pth'
+bert_path = '../../bert-base-chinese'
+# bert_path = '../../chinese-macbert-base'
+best_model_path = '../../models/detect/bert_TC.pth'
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(f"device: {device}")
 
-# 定义封装的模型
-class MyModel(torch.nn.Module):
-    def __init__(self, num_labels, dropout_prob):
-        super(MyModel, self).__init__()
-        self.bert = BertModel.from_pretrained(model_path)
+
+class TC_Hybrid(torch.nn.Module):
+    def __init__(self, input_size, hidden_size, num_labels, dropout_prob):
+        super(TC_Hybrid, self).__init__()
+
+        # CNN 分支
+        self.conv3 = torch.nn.Conv1d(input_size, hidden_size, kernel_size=3, padding=1)
+        self.conv5 = torch.nn.Conv1d(input_size, hidden_size, kernel_size=5, padding=2)
+        self.conv7 = torch.nn.Conv1d(input_size, hidden_size, kernel_size=7, padding=3)
+
+        # CNN 特征降维层
+        self.cnn_fc = torch.nn.Linear(hidden_size * 3, hidden_size)  # 将 CNN 特征从 768 降维到 256
+
+        # Bi-LSTM 分支
+        self.lstm = torch.nn.LSTM(input_size, hidden_size // 2, num_layers=2, bidirectional=True, batch_first=True)
+
+        # 动态融合门
+        self.fusion_gate_cnn = torch.nn.Linear(hidden_size, 1)  # 为 CNN 特征计算权重
+        self.fusion_gate_lstm = torch.nn.Linear(hidden_size, 1)  # 为 LSTM 特征计算权重
+
         self.dropout = torch.nn.Dropout(dropout_prob)
 
-        # 定义评论和内容的CNN
-        self.cnn_comment = torch.nn.Sequential(
-            torch.nn.Conv1d(768, 256, kernel_size=3, padding=1),
-            torch.nn.ReLU(),
-            torch.nn.MaxPool1d(kernel_size=2, stride=2),
-            torch.nn.Dropout(dropout_prob)
-        )
-        self.cnn_context = torch.nn.Sequential(
-            torch.nn.Conv1d(768, 256, kernel_size=3, padding=1),
-            torch.nn.ReLU(),
-            torch.nn.MaxPool1d(kernel_size=2, stride=2),
-            torch.nn.Dropout(dropout_prob)
-        )
+    def forward(self, x):
+        # CNN 分支
+        x_cnn = x.unsqueeze(2)  # [batch, input_size, 1]
+        cnn3 = torch.relu(self.conv3(x_cnn)).squeeze(2)  # [batch, hidden_size]
+        cnn5 = torch.relu(self.conv5(x_cnn)).squeeze(2)  # [batch, hidden_size]
+        cnn7 = torch.relu(self.conv7(x_cnn)).squeeze(2)  # [batch, hidden_size]
+        cnn_feat = torch.cat([cnn3, cnn5, cnn7], dim=1)  # [batch, hidden_size * 3]
 
-        # 定义分类层
-        self.classifier = torch.nn.Sequential(
-            torch.nn.Linear(256 * 2, 128),
-            torch.nn.ReLU(),
-            torch.nn.Dropout(dropout_prob),
-            torch.nn.Linear(128, num_labels)
-        )
+        # CNN 特征降维
+        cnn_feat = self.cnn_fc(cnn_feat)  # [batch, hidden_size]
 
-        # 冻结BERT参数
+        # Bi-LSTM 分支
+        lstm_out, _ = self.lstm(x.unsqueeze(1))  # [batch, 1, hidden_size]
+        lstm_feat = lstm_out[:, -1, :]  # 取最后一个时间步 [batch, hidden_size]
+
+        # 动态融合
+        gate_cnn = torch.sigmoid(self.fusion_gate_cnn(cnn_feat))  # [batch, 1]
+        gate_lstm = torch.sigmoid(self.fusion_gate_lstm(lstm_feat))  # [batch, 1]
+
+        # 加权融合
+        final_feat = gate_cnn * cnn_feat + gate_lstm * lstm_feat  # [batch, hidden_size]
+        out = self.dropout(final_feat)
+        return out
+
+# 定义封装的模型
+class MyModel(torch.nn.Module):
+    def __init__(self, hidden_size, num_labels, dropout_prob):
+        super(MyModel, self).__init__()
+        self.bert = BertModel.from_pretrained(bert_path)
+        self.model = TC_Hybrid(
+            self.bert.config.hidden_size,
+            hidden_size,
+            num_labels,
+            dropout_prob
+        )
+        self.dropout = torch.nn.Dropout(dropout_prob)
+        self.relu = torch.nn.ReLU()
+        self.fc = torch.nn.Linear(hidden_size, 256)
+        self.classifier = torch.nn.Linear(256, num_labels)
+
+        # 冻结 BERT 参数
         for param in self.bert.parameters():
             param.requires_grad = False
 
-    def forward(self, comment_input_ids, comment_attention_mask, context_input_ids, context_attention_mask, labels=None):
-        comment_outputs = self.bert(
-            input_ids=comment_input_ids,
-            attention_mask=comment_attention_mask
+    def forward(self, input_ids, attention_mask, labels=None):
+        outputs = self.bert(
+            input_ids=input_ids,
+            attention_mask=attention_mask
         )
-        comment_embeddings = comment_outputs.last_hidden_state
+        hidden_states = outputs.last_hidden_state
+        out = self.model(hidden_states)
 
-        context_outputs = self.bert(
-            input_ids=context_input_ids,
-            attention_mask=context_attention_mask
-        )
-        context_embeddings = context_outputs.last_hidden_state
-
-        # 将BERT输出通过CNN处理
-        comment_embeddings = comment_embeddings.permute(0, 2, 1)
-        comment_cnn_out = self.cnn_comment(comment_embeddings)
-        comment_cnn_out = torch.mean(comment_cnn_out, dim=2)
-
-        context_embeddings = context_embeddings.permute(0, 2, 1)
-        context_cnn_out = self.cnn_context(context_embeddings)
-        context_cnn_out = torch.mean(context_cnn_out, dim=2)
-
-        # 拼接评论和内容的CNN输出
-        combined = torch.cat([comment_cnn_out, context_cnn_out], dim=1)
-
-        # 通过分类层
-        logits = self.classifier(combined)
+        out = self.fc(out)
+        out = self.relu(out)
+        out = self.dropout(out)
+        logits = self.classifier(out)
 
         if labels is not None:
             loss_fct = torch.nn.CrossEntropyLoss()
-            loss = loss_fct(logits, labels)
+            loss = loss_fct(logits.view(-1, self.classifier.out_features), labels.view(-1))
             return logits, loss
         else:
             return logits
 
 # 定义数据集类
-class SarcasmDataset(Dataset):
+class MyDataset(Dataset):
     def __init__(self, data, topic_dict, tokenizer):
         self.data = data
         self.topic_dict = topic_dict
@@ -113,21 +132,13 @@ class SarcasmDataset(Dataset):
         topic_title = topic_content.get('topicTitle', '')
         topic_text_content = topic_content.get('topicContent', '')
 
-        # 构造双通道输入
-        comment_input = review
-        # context_input = f"{topic_title} [SEP] {topic_text_content}"
-        context_input = topic_title
+        # 拼接评论和话题内容
+        # input_text = f"{review} [SEP] {topic_title} {topic_text_content}"
+        input_text = f"{review} [SEP] {topic_title}"
 
-        # 编码
-        comment_encoding = self.tokenizer(
-            comment_input,
-            padding='max_length',
-            max_length=256,
-            truncation=True,
-            return_tensors='pt'
-        )
-        context_encoding = self.tokenizer(
-            context_input,
+        # 使用BERT tokenizer编码
+        encoding = self.tokenizer(
+            input_text,
             padding='max_length',
             max_length=256,
             truncation=True,
@@ -135,11 +146,9 @@ class SarcasmDataset(Dataset):
         )
 
         return {
-            'comment_input_ids': comment_encoding['input_ids'].squeeze(),
-            'comment_attention_mask': comment_encoding['attention_mask'].squeeze(),
-            'context_input_ids': context_encoding['input_ids'].squeeze(),
-            'context_attention_mask': context_encoding['attention_mask'].squeeze(),
-            'labels': torch.tensor(is_sarcasm, dtype=torch.long)
+            'input_ids': encoding['input_ids'].squeeze(),
+            'attention_mask': encoding['attention_mask'].squeeze(),
+            'label': torch.tensor(is_sarcasm, dtype=torch.long)
         }
 
 # 加载评论
@@ -177,31 +186,31 @@ if __name__ == '__main__':
     topic_data = load_topic_data(train_topic_path)
 
     # 分割数据集为训练集和测试集
-    train_data, test_data = train_test_split(train_data, test_size=test_size, random_state=42)
+    train_data, test_data = train_test_split(train_data, test_size=test_size, train_size=train_size, random_state=42)
 
-    # 初始化 BERT 分词器
-    tokenizer = BertTokenizerFast.from_pretrained(model_path, use_fast=True)
+    # 初始化tokenizer
+    tokenizer = BertTokenizerFast.from_pretrained(bert_path)
 
     # 创建数据集
-    train_dataset = SarcasmDataset(train_data, topic_data, tokenizer)
-    test_dataset = SarcasmDataset(test_data, topic_data, tokenizer)
+    train_dataset = MyDataset(train_data, topic_data, tokenizer)
+    test_dataset = MyDataset(test_data, topic_data, tokenizer)
 
     # 创建数据加载器
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
 
     # 定义模型
-    model = MyModel(num_labels=2, dropout_prob=dropout_prob)
+    model = MyModel(hidden_size=768, num_labels=2, dropout_prob=dropout_prob)
     model.to(device)
 
     # 定义优化器
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
 
-    # 初始化列表
+    # 记录每个epoch的训练损失和测试精度
     train_losses = []
     test_losses = []
-    train_accuracies = []
     test_accuracies = []
+    train_accuracies = []
 
     # 早停机制
     patience = patience_num
@@ -210,67 +219,70 @@ if __name__ == '__main__':
     # 训练循环
     print("Training...")
     start_time = time.time()
+
+    # 训练阶段
     for epoch in range(1, num_epochs + 1):
-        model.train()  # 设置模型为训练模式
+        model.train()
         total_loss = 0.0
-        total_correct = 0
-        total_samples = 0
+        train_total_correct = 0  # 用于计算训练准确率
+        train_total_samples = 0
 
         # 训练每一批次
         for batch in train_loader:
-            comment_input_ids = batch['comment_input_ids'].to(device)
-            comment_attention_mask = batch['comment_attention_mask'].to(device)
-            context_input_ids = batch['context_input_ids'].to(device)
-            context_attention_mask = batch['context_attention_mask'].to(device)
-            labels = batch['labels'].to(device)
+            input_ids = batch['input_ids'].to(device)
+            attention_mask = batch['attention_mask'].to(device)
+            labels = batch['label'].to(device)
 
             optimizer.zero_grad()
 
-            # 获取 logits 和 loss
-            logits, loss = model(comment_input_ids, comment_attention_mask, context_input_ids, context_attention_mask, labels=labels)
+            outputs = model(input_ids, attention_mask, labels=labels)
+            logits = outputs[0]
+            loss = outputs[1]
             loss.backward()
             optimizer.step()
 
             total_loss += loss.item()
 
-            # 计算准确率
-            predictions = torch.argmax(logits, dim=1)
-            total_correct += (predictions == labels).sum().item()
-            total_samples += labels.size(0)
+            # 计算训练准确率
+            train_correct = (torch.argmax(logits, dim=1) == labels).sum().item()
+            train_total_correct += train_correct
+            train_total_samples += labels.size(0)
 
         avg_train_loss = total_loss / len(train_loader)
-        train_accuracy = total_correct / total_samples
+        train_losses.append(avg_train_loss)
+
+        # 计算训练准确率
+        train_accuracy = train_total_correct / train_total_samples
+        train_accuracies.append(train_accuracy)
 
         # 测试阶段
         model.eval()
+        true_labels = []
+        pred_labels = []
         total_test_loss = 0.0
-        total_test_correct = 0
-        total_test_samples = 0
 
         with torch.no_grad():
             for batch in test_loader:
-                comment_input_ids = batch['comment_input_ids'].to(device)
-                comment_attention_mask = batch['comment_attention_mask'].to(device)
-                context_input_ids = batch['context_input_ids'].to(device)
-                context_attention_mask = batch['context_attention_mask'].to(device)
-                labels = batch['labels'].to(device)
+                input_ids = batch['input_ids'].to(device)
+                attention_mask = batch['attention_mask'].to(device)
+                labels = batch['label'].to(device)
 
-                # 获取 logits 和 loss
-                logits, test_loss = model(comment_input_ids, comment_attention_mask, context_input_ids, context_attention_mask, labels=labels)
+                outputs = model(input_ids, attention_mask, labels=labels)
+                logits = outputs[0]
+                loss = outputs[1]
+
+                total_test_loss += loss.item()
+
                 predictions = torch.argmax(logits, dim=1)
+                true_labels.extend(labels.cpu().numpy())
+                pred_labels.extend(predictions.cpu().numpy())
 
-                # 累加测试损失
-                total_test_loss += test_loss.item()
-
-                # 计算准确率
-                total_test_correct += (predictions == labels).sum().item()
-                total_test_samples += labels.size(0)
-
-        # 计算并保存测试精度
-        test_accuracy = total_test_correct / total_test_samples
         avg_test_loss = total_test_loss / len(test_loader)
+        test_losses.append(avg_test_loss)
 
-        # 打印结果
+        test_accuracy = np.mean(np.array(true_labels) == np.array(pred_labels))
+        test_accuracies.append(test_accuracy)
+
         print(f"Epoch {epoch}/{num_epochs}, "
               f"Train Loss: {avg_train_loss:.4f}, "
               f"Train Acc: {train_accuracy * 100:.2f}%, "
@@ -292,8 +304,7 @@ if __name__ == '__main__':
     total_training_time = end_time - start_time
     print(f"Total training time: {total_training_time:.2f} seconds")
 
-
-    # 加载最佳模型并评估
+    # 加载最佳模型并绘制ROC曲线
     model.load_state_dict(torch.load(best_model_path))
     model.eval()
 
@@ -303,32 +314,29 @@ if __name__ == '__main__':
 
     with torch.no_grad():
         for batch in test_loader:
-            comment_input_ids = batch['comment_input_ids'].to(device)
-            comment_attention_mask = batch['comment_attention_mask'].to(device)
-            context_input_ids = batch['context_input_ids'].to(device)
-            context_attention_mask = batch['context_attention_mask'].to(device)
-            labels = batch['labels'].to(device)
+            input_ids = batch['input_ids'].to(device)
+            attention_mask = batch['attention_mask'].to(device)
+            labels = batch['label'].to(device)
 
-            # 获取模型输出
-            logits = model(comment_input_ids, comment_attention_mask, context_input_ids, context_attention_mask)
+            logits = model(input_ids, attention_mask)
             probabilities = torch.softmax(logits, dim=1)
+            pred_probs.extend(probabilities[:, 1].cpu().numpy())
             preds = torch.argmax(logits, dim=1)
-
-            pred_probs.extend(probabilities[:, 1].cpu().numpy())  # 正类概率（讽刺类别）
-            pred_labels.extend(preds.cpu().numpy())  # 预测标签
+            pred_labels.extend(preds.cpu().numpy())
             true_labels.extend(labels.cpu().numpy())
 
     # 计算ROC和AUC
     fpr, tpr, _ = roc_curve(true_labels, pred_probs)
     roc_auc = auc(fpr, tpr)
 
-    plot_roc_curve(fpr, tpr, roc_auc, path=f'../../ROC/mynet_4.png')
+    # 绘制ROC曲线
+    # plot_roc_curve(fpr, tpr, roc_auc, path=f'../../ROC/all_Linear.png')
 
     # 计算召回率、F1分数等指标
     precision, recall, f1, _ = precision_recall_fscore_support(true_labels, pred_labels, average='binary')
 
     # 输出结果
     print(f"AUC: {roc_auc:.4f}")
-    print(f"Precision: {precision * 100:.2f}")
-    print(f"Recall: {recall * 100:.2f}")
-    print(f"F1 Score: {f1 * 100:.2f}")
+    print(f"Precision: {precision:.4f}")
+    print(f"Recall: {recall:.4f}")
+    print(f"F1 Score: {f1:.4f}")
