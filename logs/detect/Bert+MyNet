@@ -1,0 +1,43 @@
+Bert+TC:
+input_text = f"{review} [SEP] {topic_title}":
+
+AUC: 0.8236
+Precision: 0.8035
+Recall: 0.8797
+F1 Score: 0.8399
+
+input_text = f"{review} [SEP] {topic_title} {topic_text_content}":
+
+AUC: 0.8406
+Precision: 0.8084
+Recall: 0.8734
+F1 Score: 0.8397
+
+input_text = f"{review} [SEP] {topic_text_content}":
+
+AUC: 0.8397
+Precision: 0.8174
+Recall: 0.8785
+F1 Score: 0.8469
+
+
+解开Bert，input_text = f"{review} [SEP] {topic_text_content}":
+
+AUC: 0.8576
+Precision: 0.8439
+Recall: 0.8589
+F1 Score: 0.8513
+
+解开Bert，input_text = f"{review} [SEP] {topic_title}":
+
+AUC: 0.8536
+Precision: 0.8515
+Recall: 0.8348
+F1 Score: 0.8431
+
+解开Bert，input_text = f"{review} [SEP] {topic_title} {topic_text_content}":
+
+AUC: 0.8498
+Precision: 0.8418
+Recall: 0.8519
+F1 Score: 0.8468

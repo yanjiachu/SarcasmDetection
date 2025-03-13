@@ -9,11 +9,10 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import roc_curve, auc, precision_recall_fscore_support
 
 # 定义超参数
-batch_size = 16
-learning_rate = 5e-5
+batch_size = 32
+learning_rate = 1e-5
 dropout_prob = 0.1
 patience_num = 3    # 早停阈值
-draw_step = 3       # 绘制loss和acc的图像的间隔
 num_epochs = 30
 train_size = 0.9
 test_size = 0.1
@@ -21,10 +20,9 @@ train_path = '../../data/train.json'
 train_topic_path = '../../data/train_topic.json'
 bert_path = '../../bert-base-chinese'
 # bert_path = '../../chinese-macbert-base'
-best_model_path = '../../models/detect/bert_TC.pth'
+best_model_path = '../../models/detect/bert_TC_content.pth'
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(f"device: {device}")
-
 
 class TC_Hybrid(torch.nn.Module):
     def __init__(self, input_size, hidden_size, num_labels, dropout_prob):
@@ -49,18 +47,19 @@ class TC_Hybrid(torch.nn.Module):
 
     def forward(self, x):
         # CNN 分支
-        x_cnn = x.unsqueeze(2)  # [batch, input_size, 1]
-        cnn3 = torch.relu(self.conv3(x_cnn)).squeeze(2)  # [batch, hidden_size]
-        cnn5 = torch.relu(self.conv5(x_cnn)).squeeze(2)  # [batch, hidden_size]
-        cnn7 = torch.relu(self.conv7(x_cnn)).squeeze(2)  # [batch, hidden_size]
-        cnn_feat = torch.cat([cnn3, cnn5, cnn7], dim=1)  # [batch, hidden_size * 3]
+        x_cnn = x.transpose(1, 2)  # 调整维度以适应 Conv1d [batch, input_size, seq_len]
+        cnn3 = torch.relu(self.conv3(x_cnn)).transpose(1, 2)  # [batch, seq_len, hidden_size]
+        cnn5 = torch.relu(self.conv5(x_cnn)).transpose(1, 2)  # [batch, seq_len, hidden_size]
+        cnn7 = torch.relu(self.conv7(x_cnn)).transpose(1, 2)  # [batch, seq_len, hidden_size]
+        cnn_feat = torch.cat([cnn3, cnn5, cnn7], dim=2)  # [batch, seq_len, hidden_size * 3]
 
         # CNN 特征降维
+        cnn_feat = cnn_feat.mean(dim=1)  # [batch, hidden_size * 3]
         cnn_feat = self.cnn_fc(cnn_feat)  # [batch, hidden_size]
 
         # Bi-LSTM 分支
-        lstm_out, _ = self.lstm(x.unsqueeze(1))  # [batch, 1, hidden_size]
-        lstm_feat = lstm_out[:, -1, :]  # 取最后一个时间步 [batch, hidden_size]
+        lstm_out, _ = self.lstm(x)  # [batch, seq_len, hidden_size]
+        lstm_feat = lstm_out.mean(dim=1)  # [batch, hidden_size]
 
         # 动态融合
         gate_cnn = torch.sigmoid(self.fusion_gate_cnn(cnn_feat))  # [batch, 1]
@@ -88,8 +87,8 @@ class MyModel(torch.nn.Module):
         self.classifier = torch.nn.Linear(256, num_labels)
 
         # 冻结 BERT 参数
-        for param in self.bert.parameters():
-            param.requires_grad = False
+        # for param in self.bert.parameters():
+        #     param.requires_grad = False
 
     def forward(self, input_ids, attention_mask, labels=None):
         outputs = self.bert(
@@ -134,7 +133,8 @@ class MyDataset(Dataset):
 
         # 拼接评论和话题内容
         # input_text = f"{review} [SEP] {topic_title} {topic_text_content}"
-        input_text = f"{review} [SEP] {topic_title}"
+        # input_text = f"{review} [SEP] {topic_title}"
+        input_text = f"{review} [SEP] {topic_text_content}"
 
         # 使用BERT tokenizer编码
         encoding = self.tokenizer(
@@ -217,92 +217,91 @@ if __name__ == '__main__':
     best_accuracy = 0.0
 
     # 训练循环
-    print("Training...")
-    start_time = time.time()
-
-    # 训练阶段
-    for epoch in range(1, num_epochs + 1):
-        model.train()
-        total_loss = 0.0
-        train_total_correct = 0  # 用于计算训练准确率
-        train_total_samples = 0
-
-        # 训练每一批次
-        for batch in train_loader:
-            input_ids = batch['input_ids'].to(device)
-            attention_mask = batch['attention_mask'].to(device)
-            labels = batch['label'].to(device)
-
-            optimizer.zero_grad()
-
-            outputs = model(input_ids, attention_mask, labels=labels)
-            logits = outputs[0]
-            loss = outputs[1]
-            loss.backward()
-            optimizer.step()
-
-            total_loss += loss.item()
-
-            # 计算训练准确率
-            train_correct = (torch.argmax(logits, dim=1) == labels).sum().item()
-            train_total_correct += train_correct
-            train_total_samples += labels.size(0)
-
-        avg_train_loss = total_loss / len(train_loader)
-        train_losses.append(avg_train_loss)
-
-        # 计算训练准确率
-        train_accuracy = train_total_correct / train_total_samples
-        train_accuracies.append(train_accuracy)
-
-        # 测试阶段
-        model.eval()
-        true_labels = []
-        pred_labels = []
-        total_test_loss = 0.0
-
-        with torch.no_grad():
-            for batch in test_loader:
-                input_ids = batch['input_ids'].to(device)
-                attention_mask = batch['attention_mask'].to(device)
-                labels = batch['label'].to(device)
-
-                outputs = model(input_ids, attention_mask, labels=labels)
-                logits = outputs[0]
-                loss = outputs[1]
-
-                total_test_loss += loss.item()
-
-                predictions = torch.argmax(logits, dim=1)
-                true_labels.extend(labels.cpu().numpy())
-                pred_labels.extend(predictions.cpu().numpy())
-
-        avg_test_loss = total_test_loss / len(test_loader)
-        test_losses.append(avg_test_loss)
-
-        test_accuracy = np.mean(np.array(true_labels) == np.array(pred_labels))
-        test_accuracies.append(test_accuracy)
-
-        print(f"Epoch {epoch}/{num_epochs}, "
-              f"Train Loss: {avg_train_loss:.4f}, "
-              f"Train Acc: {train_accuracy * 100:.2f}%, "
-              f"Test Loss: {avg_test_loss:.4f}, "
-              f"Test Acc: {test_accuracy * 100:.2f}%")
-
-        # 早停机制
-        if test_accuracy > best_accuracy:
-            patience = patience_num
-            best_accuracy = test_accuracy
-            torch.save(model.state_dict(), best_model_path)
-        else:
-            patience -= 1
-            if patience == 0:
-                print("Early stopping!")
-                break
-
-    end_time = time.time()
-    total_training_time = end_time - start_time
-    print(f"Total training time: {total_training_time:.2f} seconds")
+    # print("Training...")
+    # start_time = time.time()
+    # # 训练阶段
+    # for epoch in range(1, num_epochs + 1):
+    #     model.train()
+    #     total_loss = 0.0
+    #     train_total_correct = 0  # 用于计算训练准确率
+    #     train_total_samples = 0
+    #
+    #     # 训练每一批次
+    #     for batch in train_loader:
+    #         input_ids = batch['input_ids'].to(device)
+    #         attention_mask = batch['attention_mask'].to(device)
+    #         labels = batch['label'].to(device)
+    #
+    #         optimizer.zero_grad()
+    #
+    #         outputs = model(input_ids, attention_mask, labels=labels)
+    #         logits = outputs[0]
+    #         loss = outputs[1]
+    #         loss.backward()
+    #         optimizer.step()
+    #
+    #         total_loss += loss.item()
+    #
+    #         # 计算训练准确率
+    #         train_correct = (torch.argmax(logits, dim=1) == labels).sum().item()
+    #         train_total_correct += train_correct
+    #         train_total_samples += labels.size(0)
+    #
+    #     avg_train_loss = total_loss / len(train_loader)
+    #     train_losses.append(avg_train_loss)
+    #
+    #     # 计算训练准确率
+    #     train_accuracy = train_total_correct / train_total_samples
+    #     train_accuracies.append(train_accuracy)
+    #
+    #     # 测试阶段
+    #     model.eval()
+    #     true_labels = []
+    #     pred_labels = []
+    #     total_test_loss = 0.0
+    #
+    #     with torch.no_grad():
+    #         for batch in test_loader:
+    #             input_ids = batch['input_ids'].to(device)
+    #             attention_mask = batch['attention_mask'].to(device)
+    #             labels = batch['label'].to(device)
+    #
+    #             outputs = model(input_ids, attention_mask, labels=labels)
+    #             logits = outputs[0]
+    #             loss = outputs[1]
+    #
+    #             total_test_loss += loss.item()
+    #
+    #             predictions = torch.argmax(logits, dim=1)
+    #             true_labels.extend(labels.cpu().numpy())
+    #             pred_labels.extend(predictions.cpu().numpy())
+    #
+    #     avg_test_loss = total_test_loss / len(test_loader)
+    #     test_losses.append(avg_test_loss)
+    #
+    #     test_accuracy = np.mean(np.array(true_labels) == np.array(pred_labels))
+    #     test_accuracies.append(test_accuracy)
+    #
+    #     print(f"Epoch {epoch}/{num_epochs}, "
+    #           f"Train Loss: {avg_train_loss:.4f}, "
+    #           f"Train Acc: {train_accuracy * 100:.2f}%, "
+    #           f"Test Loss: {avg_test_loss:.4f}, "
+    #           f"Test Acc: {test_accuracy * 100:.2f}%")
+    #
+    #     # 早停机制
+    #     if test_accuracy > best_accuracy:
+    #         patience = patience_num
+    #         best_accuracy = test_accuracy
+    #         torch.save(model.state_dict(), best_model_path)
+    #     else:
+    #         patience -= 1
+    #         if patience == 0:
+    #             print("Early stopping!")
+    #             break
+    #
+    # end_time = time.time()
+    # total_training_time = end_time - start_time
+    # print(f"Total training time: {total_training_time:.2f} seconds")
 
     # 加载最佳模型并绘制ROC曲线
     model.load_state_dict(torch.load(best_model_path))
