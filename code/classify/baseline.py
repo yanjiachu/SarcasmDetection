@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader, Dataset
 from transformers import BertTokenizerFast, BertModel
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import confusion_matrix
+from sklearn.metrics import f1_score, confusion_matrix
 import seaborn as sns
 
 # 定义超参数
@@ -21,7 +21,8 @@ test_size = 0.1
 train_path = '../../data/train.json'
 train_topic_path = '../../data/train_topic.json'
 model_path = '../../bert-base-chinese'
-pic_path = '../../ConfusionMatrix/bert.png'
+best_model_path = '../../models/classify/baseline.pth'
+pic_path = '../../ConfusionMatrix/baseline.png'
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(f"device: {device}")
 
@@ -32,20 +33,6 @@ class MyModel(torch.nn.Module):
         self.bert = BertModel.from_pretrained(model_path)
         self.dropout = torch.nn.Dropout(dropout_prob)
         self.classifier = torch.nn.Linear(self.bert.config.hidden_size, num_labels)
-
-        # 冻结 BERT 参数，除了最后3层
-        # for name, param in self.bert.named_parameters():
-        #     if 'encoder.layer.11' in name or 'encoder.layer.10' in name or 'encoder.layer.9' in name:
-        #         param.requires_grad = True
-        #     else:
-        #         param.requires_grad = False
-
-        # 冻结 BERT q前三层参数
-        # for name, param in self.bert.named_parameters():
-        #     if 'encoder.layer.0' in name or 'encoder.layer.1' in name or 'encoder.layer.2' in name:
-        #         param.requires_grad = False
-        #     else:
-        #         param.requires_grad = True
 
         # 冻结 BERT 参数
         # for param in self.bert.parameters():
@@ -322,10 +309,10 @@ if __name__ == '__main__':
         f.write(f"Total training time: {total_training_time:.2f} seconds\n")
 
     # 加载最佳模型
-    model.load_state_dict(torch.load('../../models/classify/best_model.pth'))
+    model.load_state_dict(torch.load(best_model_path))
     model.eval()
 
-    # 收集测试集预测结果
+    # 在测试阶段收集真实标签和预测标签
     true_labels = []
     pred_labels = []
 
@@ -349,15 +336,34 @@ if __name__ == '__main__':
             true_labels.extend(labels.cpu().numpy())
             pred_labels.extend(predictions.cpu().numpy())
 
+    # 计算F1值
+    f1 = f1_score(true_labels, pred_labels, average='weighted')
+    print(f"F1 Score: {f1:.4f}")
+
     # 生成混淆矩阵
     cm = confusion_matrix(true_labels, pred_labels, labels=range(6))
 
+    # 输出混淆矩阵
     plt.figure(figsize=(12, 10))
     sns.heatmap(cm, annot=True, fmt='d', cmap='Blues',
                 xticklabels=[1, 2, 3, 4, 5, 6],
                 yticklabels=[1, 2, 3, 4, 5, 6])
     plt.xlabel('Predicted Type')
     plt.ylabel('True Type')
-    plt.title('ConfusionMatrix of SarcasmTypes')
+    plt.title('Confusion Matrix of Sarcasm Types')
     plt.savefig(pic_path)
+    plt.close()
+
+    # 归一化混淆矩阵
+    cm_normalized = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
+
+    # 输出归一化后的混淆矩阵
+    plt.figure(figsize=(12, 10))
+    sns.heatmap(cm_normalized, annot=True, fmt='.2f', cmap='Blues',
+                xticklabels=[1, 2, 3, 4, 5, 6],
+                yticklabels=[1, 2, 3, 4, 5, 6])
+    plt.xlabel('Predicted Type')
+    plt.ylabel('True Type')
+    plt.title('Normalized Confusion Matrix of Sarcasm Types')
+    plt.savefig(pic_path.replace('.png', '_normalized.png'))
     plt.close()

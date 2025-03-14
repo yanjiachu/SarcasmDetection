@@ -6,19 +6,22 @@ import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader, Dataset
 from transformers import BertTokenizerFast, BertModel
 from sklearn.model_selection import train_test_split
+from sklearn.metrics import f1_score, confusion_matrix
+import seaborn as sns
 
 # 定义超参数
 batch_size = 16
-learning_rate = 5e-5
-dropout_prob = 0.25
-patience_num = 5    # 早停阈值
-draw_step = 3       # 绘制loss和acc的图像的间隔，建议与早停机制配合
+learning_rate = 2e-5
+dropout_prob = 0.2
+patience_num = 3    # 早停阈值
 num_epochs = 30
 train_size = 0.9
 test_size = 0.1
 train_path = '../../data/train.json'
 train_topic_path = '../../data/train_topic.json'
 model_path = '../../bert-base-chinese'
+best_model_path = '../../models/classify/cnn.pth'
+pic_path = '../../ConfusionMatrix/cnn.png'
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(f"device: {device}")
 
@@ -83,13 +86,6 @@ class MyModel(torch.nn.Module):
         # 冻结 BERT 参数
         # for param in self.bert.parameters():
         #     param.requires_grad = False
-
-        # 冻结 BERT q前三层参数
-        for name, param in self.bert.named_parameters():
-            if 'encoder.layer.0' in name or 'encoder.layer.1' in name or 'encoder.layer.2' in name:
-                param.requires_grad = False
-            else:
-                param.requires_grad = True
 
     def forward(self, input_ids, attention_mask, labels=None):
         outputs = self.bert(
@@ -173,29 +169,6 @@ def load_topic_data(file_path):
         data = json.load(f)
     topic_dict = {item['topicId']: item for item in data}
     return topic_dict
-
-def plot_loss_acc(train_losses, test_losses, train_accuracies, test_accuracies, epoch, path):
-    epochs = range(1, epoch + 1)
-    plt.figure(figsize=(12, 4))
-
-    plt.subplot(1, 2, 1)
-    plt.plot(epochs, train_losses, 'b', label='Training Loss')
-    plt.plot(epochs, test_losses, 'r', label='Test Loss')
-    plt.title('Training Loss vs. Epochs')
-    plt.xlabel('Epochs')
-    plt.ylabel('Loss')
-    plt.legend()
-
-    plt.subplot(1, 2, 2)
-    plt.plot(epochs, train_accuracies, 'b', label='Train Accuracy')
-    plt.plot(epochs, test_accuracies, 'r', label='Test Accuracy')
-    plt.title('Test Accuracy vs. Epochs')
-    plt.xlabel('Epochs')
-    plt.ylabel('Accuracy')
-    plt.legend()
-
-    plt.tight_layout()
-    plt.savefig(path)
 
 # 主函数
 if __name__ == '__main__':
@@ -336,34 +309,80 @@ if __name__ == '__main__':
               f"Train Acc: {train_accuracy * 100:.2f}%, "
               f"Test Loss: {avg_test_loss:.4f}, "
               f"Test Acc: {test_accuracy * 100:.2f}%")
-        # 写入日志
-        with open(f"../logs/classify/2_3-11_TextCNN_{num_epochs}.txt", "a") as f:
-            f.write(f"Epoch {epoch}/{num_epochs}, "
-                    f"Train Loss: {avg_train_loss:.4f}, "
-                    f"Train Acc: {train_accuracy * 100:.2f}%, "
-                    f"Test Loss: {avg_test_loss:.4f}, "
-                    f"Test Acc: {test_accuracy * 100:.2f}%\n")
 
-        # 阶段输出图像
-        if epoch % draw_step == 0:
-            plot_loss_acc(train_losses, test_losses, train_accuracies, test_accuracies, epoch,
-                path=f'../training_curves/classify/2_3-11_TextCNN_{epoch}.png'
-            )
 
         # 早停机制
         if test_accuracy > best_accuracy:
             patience = patience_num
             best_accuracy = test_accuracy
+            torch.save(model.state_dict(), best_model_path)
         else:
             patience -= 1
             if patience == 0:
                 print("Early stopping!")
-                with open(f"../logs/classify/2_3-11_TextCNN_{num_epochs}.txt", "a") as f:
-                    f.write("Early stopping!\n")
                 break
 
     end_time = time.time()
     total_training_time = end_time - start_time
     print(f"Total training time: {total_training_time:.2f} seconds")
-    with open(f"../logs/classify/2_3-11_TextCNN_{num_epochs}.txt", "a") as f:
-        f.write(f"Total training time: {total_training_time:.2f} seconds\n")
+
+
+    # 加载最佳模型
+    model.load_state_dict(torch.load(best_model_path))
+    model.eval()
+
+    # 在测试阶段收集真实标签和预测标签
+    true_labels = []
+    pred_labels = []
+
+    with torch.no_grad():
+        for batch in test_loader:
+            input_ids = []
+            attention_masks = []
+            labels = []
+            for sample in batch:
+                input_ids.append(sample['input_ids'])
+                attention_masks.append(sample['attention_mask'])
+                labels.append(sample['label'])
+
+            input_ids = torch.stack(input_ids).to(device)
+            attention_masks = torch.stack(attention_masks).to(device)
+            labels = torch.stack(labels).to(device)
+
+            logits = model(input_ids, attention_masks)
+            predictions = torch.argmax(logits, dim=1)
+
+            true_labels.extend(labels.cpu().numpy())
+            pred_labels.extend(predictions.cpu().numpy())
+
+    # 计算F1值
+    f1 = f1_score(true_labels, pred_labels, average='weighted')
+    print(f"F1 Score: {f1:.4f}")
+
+    # 生成混淆矩阵
+    cm = confusion_matrix(true_labels, pred_labels, labels=range(6))
+
+    # 输出混淆矩阵
+    plt.figure(figsize=(12, 10))
+    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues',
+                xticklabels=[1, 2, 3, 4, 5, 6],
+                yticklabels=[1, 2, 3, 4, 5, 6])
+    plt.xlabel('Predicted Type')
+    plt.ylabel('True Type')
+    plt.title('Confusion Matrix of Sarcasm Types')
+    plt.savefig(pic_path)
+    plt.close()
+
+    # 归一化混淆矩阵
+    cm_normalized = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
+
+    # 输出归一化后的混淆矩阵
+    plt.figure(figsize=(12, 10))
+    sns.heatmap(cm_normalized, annot=True, fmt='.2f', cmap='Blues',
+                xticklabels=[1, 2, 3, 4, 5, 6],
+                yticklabels=[1, 2, 3, 4, 5, 6])
+    plt.xlabel('Predicted Type')
+    plt.ylabel('True Type')
+    plt.title('Normalized Confusion Matrix of Sarcasm Types')
+    plt.savefig(pic_path.replace('.png', '_normalized.png'))
+    plt.close()
