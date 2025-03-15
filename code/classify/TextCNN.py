@@ -310,7 +310,6 @@ if __name__ == '__main__':
               f"Test Loss: {avg_test_loss:.4f}, "
               f"Test Acc: {test_accuracy * 100:.2f}%")
 
-
         # 早停机制
         if test_accuracy > best_accuracy:
             patience = patience_num
