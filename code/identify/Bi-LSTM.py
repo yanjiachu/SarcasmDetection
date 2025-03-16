@@ -2,46 +2,55 @@ import json
 import torch
 import time
 import numpy as np
-import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader, Dataset
-from transformers import AutoTokenizer, AutoModel
+from transformers import BertTokenizerFast, BertModel
 from sklearn.model_selection import train_test_split
 
 # 定义超参数
-batch_size = 16
-learning_rate = 5e-5
+batch_size = 32
+learning_rate = 2e-5
 dropout_prob = 0.1
-patience_num = 5    # 早停阈值
-draw_step = 3       # 绘制loss和acc的图像的间隔，建议与早停机制配合
+patience_num = 3    # 早停阈值
 num_epochs = 30
 train_size = 0.9
 test_size = 0.1
 train_path = '../../data/train.json'
 train_topic_path = '../../data/train_topic.json'
-model_path = '../../chinese-lert-base'
+model_path = '../../bert-base-chinese'
+best_model_path = '../../models/identify/bi-lstm.pth'
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(f"device: {device}")
 
 # 定义封装的模型
 class MyModel(torch.nn.Module):
-    def __init__(self, num_labels, dropout_prob):
+    def __init__(self, num_labels, dropout_prob, hidden_size=768):
         super(MyModel, self).__init__()
-        self.lert = AutoModel.from_pretrained(model_path)
+        self.bert = BertModel.from_pretrained(model_path)
+        self.lstm = torch.nn.LSTM(
+            self.bert.config.hidden_size,
+            hidden_size,
+            num_layers=1,
+            batch_first=True,
+            bidirectional=True  # 设置为双向LSTM
+        )
         self.dropout = torch.nn.Dropout(dropout_prob)
-        self.classifier = torch.nn.Linear(self.lert.config.hidden_size, num_labels)
+        self.classifier = torch.nn.Linear(hidden_size * 2, num_labels)
 
-        # 冻结 LERT 参数
-        # for param in self.lert.parameters():
+        # 冻结 BERT 参数
+        # for param in self.bert.parameters():
         #     param.requires_grad = False
 
     def forward(self, input_ids, attention_mask, labels=None):
-        outputs = self.lert(
+        outputs = self.bert(
             input_ids=input_ids,
             attention_mask=attention_mask
         )
-        pooled_output = outputs.last_hidden_state
-        pooled_output = self.dropout(pooled_output)
-        logits = self.classifier(pooled_output)
+        last_hidden_state = outputs.last_hidden_state
+
+        lstm_output, (h_n, c_n) = self.lstm(last_hidden_state)
+        lstm_output = self.dropout(lstm_output)
+
+        logits = self.classifier(lstm_output)
 
         if labels is not None:
             loss_fct = torch.nn.CrossEntropyLoss()
@@ -50,11 +59,9 @@ class MyModel(torch.nn.Module):
         else:
             return logits
 
-
 # 定义标签
 label2id = {'B-ORG': 0, 'I-ORG': 1, 'O': 2}
 
-# 定义数据集类
 class SarcasmTargetDataset(Dataset):
     def __init__(self, data, topic_dict, tokenizer, label2id):
         self.data = data
@@ -73,50 +80,65 @@ class SarcasmTargetDataset(Dataset):
         sarcasm_type = item['sarcasmType']
         sarcasm_target = item['sarcasmTarget']
 
-        # 只处理标签为1且存在sarcasmTarget的讽刺文本
         if is_sarcasm == 1 and sarcasm_target:
-            # 获取话题内容
             topic_content = self.topic_dict.get(topic_id, {})
             topic_title = topic_content.get('topicTitle', '')
             topic_text_content = topic_content.get('topicContent', '')
 
-            # 拼接评论和话题内容
-            input_text = f"{review} [SEP] {topic_title} {topic_text_content}"
+            # 使用tokenizer的sep_token拼接
+            input_text = f"{review}{self.tokenizer.sep_token}{topic_title}{topic_text_content}"
 
-            # 使用 LERT tokenizer 编码
             encoding = self.tokenizer(
                 input_text,
                 padding='max_length',
                 max_length=256,
                 truncation=True,
-                return_offsets_mapping=True,  # 获取子词映射
+                return_offsets_mapping=True,
                 return_tensors='pt'
             )
 
-            # 生成标签
             offsets = encoding['offset_mapping'].squeeze().tolist()
             labels = [self.label2id['O']] * len(offsets)
+            valid_targets = []
+
+            # 预处理：确保target为字符串并去重
             for target in sarcasm_target:
-                if not isinstance(target, str):  # 确保目标是字符串类型
-                    continue  # 跳过非字符串类型的目标
+                if isinstance(target, str) and target not in valid_targets:
+                    valid_targets.append(target)
 
-                # 假设target是一个词，并且在分词后的offsets中
-                # 这里需要根据实际情况匹配目标词的位置
-                start_char = 0
-                end_char = len(input_text)
-                for i in range(len(offsets)):
-                    if offsets[i][0] <= input_text.find(target) < offsets[i][1]:
-                        start_idx = i
+            # 仅处理review中的目标
+            for target in valid_targets:
+                start_char = review.find(target)
+                if start_char == -1:
+                    continue  # 目标不在review中
+                end_char = start_char + len(target)
+
+                # 查找对应的token索引
+                start_token_idx = None
+                end_token_idx = None
+
+                # 查找起始token
+                for i, (token_start, token_end) in enumerate(offsets):
+                    if token_start <= start_char < token_end:
+                        start_token_idx = i
                         break
-                else:
-                    continue  # 目标词不在分词后的文本中，跳过
+                if start_token_idx is None:
+                    continue
 
-                labels[start_idx] = self.label2id['B-ORG']
-                for j in range(start_idx + 1, len(offsets)):
-                    if offsets[j][0] < input_text.find(target) + len(target):
+                # 查找结束token
+                for i in range(start_token_idx, len(offsets)):
+                    token_start, token_end = offsets[i]
+                    if token_end >= end_char:
+                        end_token_idx = i
+                        break
+                if end_token_idx is None:
+                    end_token_idx = len(offsets) - 1
+
+                # 标注B-和I-标签
+                labels[start_token_idx] = self.label2id['B-ORG']
+                for j in range(start_token_idx + 1, end_token_idx + 1):
+                    if j < len(labels):
                         labels[j] = self.label2id['I-ORG']
-                    else:
-                        break
 
             return {
                 'input_ids': encoding['input_ids'].squeeze(),
@@ -124,7 +146,7 @@ class SarcasmTargetDataset(Dataset):
                 'labels': torch.tensor(labels, dtype=torch.long)
             }
         else:
-            return None  # 跳过非讽刺或无sarcasmTarget的样本
+            return None
 
 # 加载评论
 def load_data_dev(file_path):
@@ -139,29 +161,6 @@ def load_topic_data(file_path):
     topic_dict = {item['topicId']: item for item in data}
     return topic_dict
 
-def plot_loss_acc(train_losses, test_losses, train_accuracies, test_accuracies, epoch, path):
-    epochs = range(1, epoch + 1)
-    plt.figure(figsize=(12, 4))
-
-    plt.subplot(1, 2, 1)
-    plt.plot(epochs, train_losses, 'b', label='Training Loss')
-    plt.plot(epochs, test_losses, 'r', label='Test Loss')
-    plt.title('Training Loss vs. Epochs')
-    plt.xlabel('Epochs')
-    plt.ylabel('Loss')
-    plt.legend()
-
-    plt.subplot(1, 2, 2)
-    plt.plot(epochs, train_accuracies, 'b', label='Train Accuracy')
-    plt.plot(epochs, test_accuracies, 'r', label='Test Accuracy')
-    plt.title('Test Accuracy vs. Epochs')
-    plt.xlabel('Epochs')
-    plt.ylabel('Accuracy')
-    plt.legend()
-
-    plt.tight_layout()
-    plt.savefig(path)
-
 # 主函数
 if __name__ == '__main__':
     # 加载数据
@@ -174,8 +173,8 @@ if __name__ == '__main__':
     # 分割数据集为训练集和测试集
     train_data, test_data = train_test_split(filtered_data, test_size=test_size, random_state=42)
 
-    # 初始化 LERT 分词器
-    tokenizer = AutoTokenizer.from_pretrained(model_path, use_fast=True)
+    # 初始化tokenizer
+    tokenizer = BertTokenizerFast.from_pretrained(model_path, use_fast=True)
 
     # 创建数据集
     train_dataset = SarcasmTargetDataset(train_data, topic_data, tokenizer, label2id)
@@ -204,7 +203,7 @@ if __name__ == '__main__':
 
     # 早停机制
     patience = patience_num
-    best_accuracy = 0.0
+    best_loss = 1e5
 
     # 训练循环
     print("Training...")
@@ -296,34 +295,17 @@ if __name__ == '__main__':
               f"Test Loss: {avg_test_loss:.4f}, "
               f"Test Acc: {comment_accuracy * 100:.2f}%")
 
-        # 写入日志
-        with open(f'../logs/identify/3_all_lert_{num_epochs}.txt', 'a') as f:
-            f.write(f"Epoch {epoch}/{num_epochs}, "
-                    f"Train Loss: {avg_train_loss:.4f}, "
-                    f"Train Acc: {train_accuracy * 100:.2f}%, "
-                    f"Test Loss: {avg_test_loss:.4f}, "
-                    f"Test Acc: {comment_accuracy * 100:.2f}%\n")
-
-        # 阶段输出图像（如果需要）
-        if epoch % draw_step == 0:
-            plot_loss_acc(train_losses, test_losses, train_accuracies, test_accuracies, epoch,
-                path=f'../training_curves/identify/3_all_lert_{epoch}.png'
-            )
-
         # 早停机制
-        if comment_accuracy > best_accuracy:
+        if avg_test_loss < best_loss:
             patience = patience_num
-            best_accuracy = comment_accuracy
+            best_loss = avg_test_loss
+            torch.save(model.state_dict(), model_path)
         else:
             patience -= 1
             if patience == 0:
                 print("Early stopping!")
-                with open(f'../logs/identify/3_all_lert_{num_epochs}.txt', 'a') as f:
-                    f.write("Early stopping!\n")
                 break
 
     end_time = time.time()
     total_training_time = end_time - start_time
     print(f"Total training time: {total_training_time:.2f} seconds")
-    with open(f'../logs/identify/3_all_lert_{num_epochs}.txt', 'a') as f:
-        f.write(f"Total training time: {total_training_time:.2f} seconds\n")

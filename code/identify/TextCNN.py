@@ -1,20 +1,23 @@
 import json
 import torch
+import time
 import numpy as np
 from torch.utils.data import DataLoader, Dataset
 from transformers import BertTokenizerFast, BertModel
 from sklearn.model_selection import train_test_split
 
 # 定义超参数
-batch_size = 16
-learning_rate = 5e-5
+batch_size = 32
+learning_rate = 2e-5
 dropout_prob = 0.1
-num_epochs = 3
+patience_num = 3    # 早停阈值
+num_epochs = 30
 train_size = 0.9
 test_size = 0.1
 train_path = '../../data/train.json'
 train_topic_path = '../../data/train_topic.json'
 model_path = '../../bert-base-chinese'
+best_model_path = '../../models/identify/cnn.pth'
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(f"device: {device}")
 
@@ -88,7 +91,6 @@ class MyModel(torch.nn.Module):
 # 定义标签
 label2id = {'B-ORG': 0, 'I-ORG': 1, 'O': 2}
 
-# 定义数据集类
 class SarcasmTargetDataset(Dataset):
     def __init__(self, data, topic_dict, tokenizer, label2id):
         self.data = data
@@ -107,50 +109,65 @@ class SarcasmTargetDataset(Dataset):
         sarcasm_type = item['sarcasmType']
         sarcasm_target = item['sarcasmTarget']
 
-        # 只处理标签为1且存在sarcasmTarget的讽刺文本
         if is_sarcasm == 1 and sarcasm_target:
-            # 获取话题内容
             topic_content = self.topic_dict.get(topic_id, {})
             topic_title = topic_content.get('topicTitle', '')
             topic_text_content = topic_content.get('topicContent', '')
 
-            # 拼接评论和话题内容
-            input_text = f"{review} [SEP] {topic_title} {topic_text_content}"
+            # 使用tokenizer的sep_token拼接
+            input_text = f"{review}{self.tokenizer.sep_token}{topic_title}{topic_text_content}"
 
-            # 使用BERT tokenizer编码
             encoding = self.tokenizer(
                 input_text,
                 padding='max_length',
                 max_length=256,
                 truncation=True,
-                return_offsets_mapping=True,  # 获取子词映射
+                return_offsets_mapping=True,
                 return_tensors='pt'
             )
 
-            # 生成标签
             offsets = encoding['offset_mapping'].squeeze().tolist()
             labels = [self.label2id['O']] * len(offsets)
+            valid_targets = []
+
+            # 预处理：确保target为字符串并去重
             for target in sarcasm_target:
-                if not isinstance(target, str):  # 确保目标是字符串类型
-                    continue  # 跳过非字符串类型的目标
+                if isinstance(target, str) and target not in valid_targets:
+                    valid_targets.append(target)
 
-                # 假设target是一个词，并且在分词后的offsets中
-                # 这里需要根据实际情况匹配目标词的位置
-                start_char = 0
-                end_char = len(input_text)
-                for i in range(len(offsets)):
-                    if offsets[i][0] <= input_text.find(target) < offsets[i][1]:
-                        start_idx = i
+            # 仅处理review中的目标
+            for target in valid_targets:
+                start_char = review.find(target)
+                if start_char == -1:
+                    continue  # 目标不在review中
+                end_char = start_char + len(target)
+
+                # 查找对应的token索引
+                start_token_idx = None
+                end_token_idx = None
+
+                # 查找起始token
+                for i, (token_start, token_end) in enumerate(offsets):
+                    if token_start <= start_char < token_end:
+                        start_token_idx = i
                         break
-                else:
-                    continue  # 目标词不在分词后的文本中，跳过
+                if start_token_idx is None:
+                    continue
 
-                labels[start_idx] = self.label2id['B-ORG']
-                for j in range(start_idx + 1, len(offsets)):
-                    if offsets[j][0] < input_text.find(target) + len(target):
+                # 查找结束token
+                for i in range(start_token_idx, len(offsets)):
+                    token_start, token_end = offsets[i]
+                    if token_end >= end_char:
+                        end_token_idx = i
+                        break
+                if end_token_idx is None:
+                    end_token_idx = len(offsets) - 1
+
+                # 标注B-和I-标签
+                labels[start_token_idx] = self.label2id['B-ORG']
+                for j in range(start_token_idx + 1, end_token_idx + 1):
+                    if j < len(labels):
                         labels[j] = self.label2id['I-ORG']
-                    else:
-                        break
 
             return {
                 'input_ids': encoding['input_ids'].squeeze(),
@@ -158,7 +175,7 @@ class SarcasmTargetDataset(Dataset):
                 'labels': torch.tensor(labels, dtype=torch.long)
             }
         else:
-            return None  # 跳过非讽刺或无sarcasmTarget的样本
+            return None
 
 # 加载评论
 def load_data_dev(file_path):
@@ -172,7 +189,6 @@ def load_topic_data(file_path):
         data = json.load(f)
     topic_dict = {item['topicId']: item for item in data}
     return topic_dict
-
 
 # 主函数
 if __name__ == '__main__':
@@ -208,11 +224,24 @@ if __name__ == '__main__':
     # 定义优化器
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
 
+    # 初始化列表
+    train_losses = []
+    test_losses = []
+    train_accuracies = []
+    test_accuracies = []
+
+    # 早停机制
+    patience = patience_num
+    best_loss = 1e5
+
     # 训练循环
     print("Training...")
-    for epoch in range(num_epochs):
+    start_time = time.time()
+    for epoch in range(1, num_epochs + 1):
         model.train()  # 设置模型为训练模式
         total_loss = 0.0
+        total_correct_comments = 0
+        total_comments = 0
 
         # 训练每一批次
         for batch in train_loader:
@@ -222,48 +251,90 @@ if __name__ == '__main__':
 
             optimizer.zero_grad()
 
-            _, loss = model(input_ids, attention_mask, labels=labels)
+            # 获取 logits 和 loss
+            logits, loss = model(input_ids, attention_mask, labels=labels)
             loss.backward()
             optimizer.step()
 
             total_loss += loss.item()
 
-        avg_train_loss = total_loss / len(train_loader)
-        print(f"Epoch {epoch + 1}/{num_epochs}, Average Training Loss: {avg_train_loss:.4f}")
-
-    # 测试阶段
-    model.eval()
-    print("Evaluating...")
-    with torch.no_grad():
-        true_labels = []
-        pred_labels = []
-        comment_correctness = []  # 记录每条评论是否全部正确
-
-        for batch in test_loader:
-            input_ids = batch['input_ids'].to(device)
-            attention_mask = batch['attention_mask'].to(device)
-            labels = batch['labels'].to(device)
-
-            logits = model(input_ids, attention_mask)
+            # 计算评论级别的训练精度
             predictions = torch.argmax(logits, dim=2)
-
-            # 将预测结果和真实标签转换为CPU和numpy格式
             batch_true_labels = labels.cpu().numpy()
             batch_pred_labels = predictions.cpu().numpy()
 
             # 逐条评论检查是否所有token都预测正确
             for i in range(len(batch_true_labels)):
                 is_correct = np.all(batch_true_labels[i] == batch_pred_labels[i])
-                comment_correctness.append(is_correct)
+                total_correct_comments += int(is_correct)
+                total_comments += 1
 
-            # 保存token级别的结果
-            true_labels.extend(batch_true_labels)
-            pred_labels.extend(batch_pred_labels)
+        avg_train_loss = total_loss / len(train_loader)
+        train_losses.append(avg_train_loss)
 
-        # 计算token级别的准确率
-        token_accuracy = np.mean(np.array(true_labels) == np.array(pred_labels))
-        print(f"Token-level Accuracy: {token_accuracy * 100:.2f}%")
+        # 计算并保存评论级别的训练精度
+        train_accuracy = total_correct_comments / total_comments
+        train_accuracies.append(train_accuracy)
+
+        # 测试阶段
+        model.eval()
+        true_labels = []
+        pred_labels = []
+        comment_correctness = []
+        total_test_loss = 0.0
+
+        with torch.no_grad():
+            for batch in test_loader:
+                input_ids = batch['input_ids'].to(device)
+                attention_mask = batch['attention_mask'].to(device)
+                labels = batch['labels'].to(device)
+
+                # 获取 logits 和 loss
+                logits, test_loss = model(input_ids, attention_mask, labels=labels)
+                predictions = torch.argmax(logits, dim=2)
+
+                # 累加测试损失
+                total_test_loss += test_loss.item()
+
+                # 将预测结果和真实标签转换为CPU和numpy格式
+                batch_true_labels = labels.cpu().numpy()
+                batch_pred_labels = predictions.cpu().numpy()
+
+                # 逐条评论检查是否所有token都预测正确
+                for i in range(len(batch_true_labels)):
+                    is_correct = np.all(batch_true_labels[i] == batch_pred_labels[i])
+                    comment_correctness.append(is_correct)
+
+                # 保存token级别的结果
+                true_labels.extend(batch_true_labels)
+                pred_labels.extend(batch_pred_labels)
 
         # 计算评论级别的准确率
         comment_accuracy = np.mean(comment_correctness)
-        print(f"Comment-level Accuracy: {comment_accuracy * 100:.2f}%")
+        test_accuracies.append(comment_accuracy)
+
+        # 计算并保存测试损失
+        avg_test_loss = total_test_loss / len(test_loader)
+        test_losses.append(avg_test_loss)
+
+        # 打印结果
+        print(f"Epoch {epoch}/{num_epochs}, "
+              f"Train Loss: {avg_train_loss:.4f}, "
+              f"Train Acc: {train_accuracy * 100:.2f}%, "
+              f"Test Loss: {avg_test_loss:.4f}, "
+              f"Test Acc: {comment_accuracy * 100:.2f}%")
+
+        # 早停机制
+        if avg_test_loss < best_loss:
+            patience = patience_num
+            best_loss = avg_test_loss
+            torch.save(model.state_dict(), model_path)
+        else:
+            patience -= 1
+            if patience == 0:
+                print("Early stopping!")
+                break
+
+    end_time = time.time()
+    total_training_time = end_time - start_time
+    print(f"Total training time: {total_training_time:.2f} seconds")
