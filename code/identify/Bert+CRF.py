@@ -31,20 +31,6 @@ class MyModel(torch.nn.Module):
         self.classifier = torch.nn.Linear(self.bert.config.hidden_size, num_labels)
         self.crf = CRF(num_tags=num_labels, batch_first=True)
 
-        # 冻结 BERT 参数，除了最后1层
-        # for name, param in self.bert.named_parameters():
-        #     if 'encoder.layer.11' in name:
-        #         param.requires_grad = True
-        #     else:
-        #         param.requires_grad = False
-
-        # 冻结 BERT 参数，除了最后3层
-        # for name, param in self.bert.named_parameters():
-        #     if 'encoder.layer.11' in name or 'encoder.layer.10' in name or 'encoder.layer.9' in name:
-        #         param.requires_grad = True
-        #     else:
-        #         param.requires_grad = False
-
         # 冻结 BERT 参数
         for param in self.bert.parameters():
             param.requires_grad = False
@@ -294,14 +280,6 @@ if __name__ == '__main__':
               f"Test Loss: {avg_test_loss:.4f}, "
               f"Test Acc: {comment_accuracy * 100:.2f}%")
 
-        # 写入日志
-        # with open(f'../logs/identify/3_all_Linear_{num_epochs}.txt', 'a') as f:
-        #     f.write(f"Epoch {epoch}/{num_epochs}, "
-        #             f"Train Loss: {avg_train_loss:.4f}, "
-        #             f"Train Acc: {train_accuracy * 100:.2f}%, "
-        #             f"Test Loss: {avg_test_loss:.4f}, "
-        #             f"Test Acc: {comment_accuracy * 100:.2f}%\n")
-
         # 早停机制
         if comment_accuracy > best_accuracy:
             patience = patience_num
@@ -310,12 +288,8 @@ if __name__ == '__main__':
             patience -= 1
             if patience == 0:
                 print("Early stopping!")
-                # with open(f'../logs/identify/3_all_Linear_{num_epochs}.txt', 'a') as f:
-                #     f.write("Early stopping!\n")
                 break
 
     end_time = time.time()
     total_training_time = end_time - start_time
     print(f"Total training time: {total_training_time:.2f} seconds")
-    # with open(f'../logs/identify/3_all_Linear_{num_epochs}.txt', 'a') as f:
-        # f.write(f"Total training time: {total_training_time:.2f} seconds\n")

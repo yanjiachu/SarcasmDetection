@@ -195,7 +195,7 @@ if __name__ == '__main__':
 
     # 早停机制
     patience = patience_num
-    best_loss = 1e5
+    best_loss = float('inf')
 
     # 训练循环
     print("Training...")
