@@ -3,7 +3,7 @@ import torch
 import time
 import numpy as np
 from torch.utils.data import DataLoader, Dataset
-from transformers import BertTokenizerFast, BertModel
+from transformers import BertModel, BertTokenizerFast
 from sklearn.model_selection import train_test_split
 
 # 定义超参数
@@ -291,7 +291,7 @@ if __name__ == '__main__':
         if avg_test_loss < best_loss:
             patience = patience_num
             best_loss = avg_test_loss
-            torch.save(model.state_dict(), model_path)
+            torch.save(model.state_dict(), best_model_path)
         else:
             patience -= 1
             if patience == 0:

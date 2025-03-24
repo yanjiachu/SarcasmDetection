@@ -328,7 +328,7 @@ if __name__ == '__main__':
         if avg_test_loss < best_loss:
             patience = patience_num
             best_loss = avg_test_loss
-            torch.save(model.state_dict(), model_path)
+            torch.save(model.state_dict(), best_model_path)
         else:
             patience -= 1
             if patience == 0:

@@ -8,17 +8,17 @@ from transformers import BertTokenizerFast, BertModel
 from sklearn.model_selection import train_test_split
 
 # 定义超参数
-batch_size = 16
-learning_rate = 5e-5
-dropout_prob = 0.2
-patience_num = 5    # 早停阈值
-draw_step = 3       # 绘制loss和acc的图像的间隔，建议与早停机制配合
+batch_size = 32
+learning_rate = 2e-5
+dropout_prob = 0.1
+patience_num = 3  # 早停阈值
 num_epochs = 30
 train_size = 0.9
 test_size = 0.1
 train_path = '../../data/train.json'
 train_topic_path = '../../data/train_topic.json'
 model_path = '../../bert-base-chinese'
+best_model_path = '../../models/identify/CRF.pth'
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(f"device: {device}")
 
@@ -77,7 +77,6 @@ class SarcasmTargetDataset(Dataset):
         topic_id = item['topicId']
         review = item['review']
         is_sarcasm = item['isSarcasm']
-        sarcasm_type = item['sarcasmType']
         sarcasm_target = item['sarcasmTarget']
 
         # 只处理标签为1且存在sarcasmTarget的讽刺文本
@@ -103,27 +102,29 @@ class SarcasmTargetDataset(Dataset):
             # 生成标签
             offsets = encoding['offset_mapping'].squeeze().tolist()
             labels = [self.label2id['O']] * len(offsets)
+            # 只对 review 部分进行标注
+            review_length = len(review)
             for target in sarcasm_target:
                 if not isinstance(target, str):  # 确保目标是字符串类型
                     continue  # 跳过非字符串类型的目标
 
-                # 假设target是一个词，并且在分词后的offsets中
-                # 这里需要根据实际情况匹配目标词的位置
-                start_char = 0
-                end_char = len(input_text)
-                for i in range(len(offsets)):
-                    if offsets[i][0] <= input_text.find(target) < offsets[i][1]:
-                        start_idx = i
-                        break
-                else:
-                    continue  # 目标词不在分词后的文本中，跳过
+                # 找到目标词在 review 中的位置
+                target_start = review.find(target)
+                if target_start == -1:
+                    continue  # 目标词不在 review 中，跳过
 
-                labels[start_idx] = self.label2id['B-ORG']
-                for j in range(start_idx + 1, len(offsets)):
-                    if offsets[j][0] < input_text.find(target) + len(target):
-                        labels[j] = self.label2id['I-ORG']
-                    else:
-                        break
+                target_end = target_start + len(target)
+
+                # 遍历 offsets，找到目标词对应的 token 位置
+                for i, (start, end) in enumerate(offsets):
+                    if start >= review_length:
+                        break  # 超出 review 部分，停止标注
+
+                    # 如果当前 token 在目标词的范围内
+                    if start <= target_start < end:
+                        labels[i] = self.label2id['B-ORG']
+                    elif start < target_end <= end:
+                        labels[i] = self.label2id['I-ORG']
 
             return {
                 'input_ids': encoding['input_ids'].squeeze(),
@@ -188,7 +189,7 @@ if __name__ == '__main__':
 
     # 早停机制
     patience = patience_num
-    best_accuracy = 0.0
+    best_loss = float('inf')  # 初始化为无穷大
 
     # 训练循环
     print("Training...")
@@ -281,9 +282,10 @@ if __name__ == '__main__':
               f"Test Acc: {comment_accuracy * 100:.2f}%")
 
         # 早停机制
-        if comment_accuracy > best_accuracy:
+        if avg_test_loss < best_loss:
             patience = patience_num
-            best_accuracy = comment_accuracy
+            best_loss = avg_test_loss
+            torch.save(model.state_dict(), best_model_path)
         else:
             patience -= 1
             if patience == 0:

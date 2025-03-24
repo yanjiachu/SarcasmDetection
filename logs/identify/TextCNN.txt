@@ -1,0 +1,8 @@
+Epoch 1/30, Train Loss: 0.0282, Train Acc: 39.51%, Test Loss: 0.0142, Test Acc: 54.63%
+Epoch 2/30, Train Loss: 0.0134, Train Acc: 53.98%, Test Loss: 0.0134, Test Acc: 57.19%
+Epoch 3/30, Train Loss: 0.0105, Train Acc: 61.47%, Test Loss: 0.0148, Test Acc: 58.53%
+Epoch 4/30, Train Loss: 0.0077, Train Acc: 68.12%, Test Loss: 0.0160, Test Acc: 61.15%
+Epoch 5/30, Train Loss: 0.0058, Train Acc: 74.80%, Test Loss: 0.0174, Test Acc: 63.64%
+Epoch 6/30, Train Loss: 0.0042, Train Acc: 79.88%, Test Loss: 0.0196, Test Acc: 62.56%
+Epoch 7/30, Train Loss: 0.0034, Train Acc: 83.49%, Test Loss: 0.0221, Test Acc: 60.06%
+Early stopping!
