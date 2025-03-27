@@ -24,9 +24,9 @@ best_model_path = '../../models/detect/bert_TC_content.pth'
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(f"device: {device}")
 
-class TC_Hybrid(torch.nn.Module):
+class SC_Hybrid(torch.nn.Module):
     def __init__(self, input_size, hidden_size, num_labels, dropout_prob):
-        super(TC_Hybrid, self).__init__()
+        super(SC_Hybrid, self).__init__()
 
         # CNN 分支
         self.conv3 = torch.nn.Conv1d(input_size, hidden_size, kernel_size=3, padding=1)
@@ -75,7 +75,7 @@ class MyModel(torch.nn.Module):
     def __init__(self, hidden_size, num_labels, dropout_prob):
         super(MyModel, self).__init__()
         self.bert = BertModel.from_pretrained(bert_path)
-        self.model = TC_Hybrid(
+        self.model = SC_Hybrid(
             self.bert.config.hidden_size,
             hidden_size,
             num_labels,

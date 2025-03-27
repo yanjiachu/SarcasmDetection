@@ -19,7 +19,7 @@ train_size = 0.9
 test_size = 0.1
 train_path = '../../data/train.json'
 train_topic_path = '../../data/train_topic.json'
-model_path = '../../bert-base-chinese'
+bert_path = '../../bert-base-chinese'
 best_model_path = '../../models/classify/bi-lstm.pth'
 pic_path = '../../ConfusionMatrix/bi-lstm.png'
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -29,7 +29,7 @@ print(f"device: {device}")
 class MyModel(torch.nn.Module):
     def __init__(self, num_labels, dropout_prob, hidden_size=768):
         super(MyModel, self).__init__()
-        self.bert = BertModel.from_pretrained(model_path)
+        self.bert = BertModel.from_pretrained(bert_path)
         # 将 LSTM 改为双向 LSTM
         self.lstm = torch.nn.LSTM(
             self.bert.config.hidden_size,
@@ -135,7 +135,7 @@ if __name__ == '__main__':
     train_data, test_data = train_test_split(filtered_data, test_size=test_size, random_state=42)
 
     # 初始化tokenizer
-    tokenizer = BertTokenizerFast.from_pretrained(model_path)
+    tokenizer = BertTokenizerFast.from_pretrained(bert_path)
 
     # 创建数据集
     train_dataset = SarcasmClassificationDataset(train_data, topic_data, tokenizer)

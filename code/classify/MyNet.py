@@ -10,9 +10,9 @@ from sklearn.metrics import f1_score, confusion_matrix
 import seaborn as sns
 
 # 定义超参数
-batch_size = 16
+batch_size = 32
 learning_rate = 2e-5
-dropout_prob = 0.2
+dropout_prob = 0.25
 patience_num = 3    # 早停阈值
 num_epochs = 30
 train_size = 0.9
@@ -20,68 +20,72 @@ test_size = 0.1
 train_path = '../../data/train.json'
 train_topic_path = '../../data/train_topic.json'
 bert_path = '../../bert-base-chinese'
-best_model_path = '../../models/classify/cnn.pth'
-pic_path = '../../ConfusionMatrix/cnn.png'
+# bert_path = '../../chinese-macbert-base'
+best_model_path = '../../models/classify/SC_Hybrid.pth'
+pic_path = '../../ConfusionMatrix/SC_Hybrid.png'
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(f"device: {device}")
 
-# 定义多核TextCNN模块
-class TextCNN(torch.nn.Module):
-    def __init__(self, hidden_size, num_classes, dropout_prob):
-        super(TextCNN, self).__init__()
-        self.hidden_size = hidden_size
-        # 定义多个不同卷积核大小的卷积层
-        self.conv1 = torch.nn.Sequential(
-            torch.nn.Conv1d(hidden_size, hidden_size, kernel_size=2, padding=1),
-            torch.nn.ReLU(),
-        )
-        self.conv2 = torch.nn.Sequential(
-            torch.nn.Conv1d(hidden_size, hidden_size, kernel_size=3, padding=1),
-            torch.nn.ReLU(),
-        )
-        self.conv3 = torch.nn.Sequential(
-            torch.nn.Conv1d(hidden_size, hidden_size, kernel_size=4, padding=1),
-            torch.nn.ReLU(),
-        )
-        self.fc = torch.nn.Linear(hidden_size * 3, num_classes)
+class SC_Hybrid(torch.nn.Module):
+    def __init__(self, input_size, hidden_size, dropout_prob):
+        super(SC_Hybrid, self).__init__()
+
+        # CNN 分支
+        self.conv3 = torch.nn.Conv1d(input_size, hidden_size, kernel_size=3, padding=1)
+        self.conv5 = torch.nn.Conv1d(input_size, hidden_size, kernel_size=5, padding=2)
+        self.conv7 = torch.nn.Conv1d(input_size, hidden_size, kernel_size=7, padding=3)
+
+        # CNN 特征降维层
+        self.cnn_fc = torch.nn.Linear(hidden_size * 3, hidden_size)  # 将 CNN 特征从 768 降维到 256
+
+        # Bi-LSTM 分支
+        self.lstm = torch.nn.LSTM(input_size, hidden_size // 2, num_layers=2, bidirectional=True, batch_first=True)
+
+        # 动态融合门
+        self.fusion_gate_cnn = torch.nn.Linear(hidden_size, 1)  # 为 CNN 特征计算权重
+        self.fusion_gate_lstm = torch.nn.Linear(hidden_size, 1)  # 为 LSTM 特征计算权重
+
         self.dropout = torch.nn.Dropout(dropout_prob)
-        self.relu = torch.nn.ReLU()
 
     def forward(self, x):
-        # x.shape = (batch_size, sequence_length, hidden_size)
-        x = x.permute(0, 2, 1)  # 转换为 (batch_size, hidden_size, sequence_length)
+        # CNN 分支
+        x_cnn = x.transpose(1, 2)  # 调整维度以适应 Conv1d [batch, input_size, seq_len]
+        cnn3 = torch.relu(self.conv3(x_cnn)).transpose(1, 2)  # [batch, seq_len, hidden_size]
+        cnn5 = torch.relu(self.conv5(x_cnn)).transpose(1, 2)  # [batch, seq_len, hidden_size]
+        cnn7 = torch.relu(self.conv7(x_cnn)).transpose(1, 2)  # [batch, seq_len, hidden_size]
+        cnn_feat = torch.cat([cnn3, cnn5, cnn7], dim=2)  # [batch, seq_len, hidden_size * 3]
 
-        # 应用多卷积核卷积
-        out1 = self.conv1(x)
-        out2 = self.conv2(x)
-        out3 = self.conv3(x)
+        # CNN 特征降维
+        cnn_feat = cnn_feat.mean(dim=1)  # [batch, hidden_size * 3]
+        cnn_feat = self.cnn_fc(cnn_feat)  # [batch, hidden_size]
 
-        # 全局最大池化，保留最重要的特征
-        out1 = torch.max(out1, dim=-1)[0]
-        out2 = torch.max(out2, dim=-1)[0]
-        out3 = torch.max(out3, dim=-1)[0]
+        # Bi-LSTM 分支
+        lstm_out, _ = self.lstm(x)  # [batch, seq_len, hidden_size]
+        lstm_feat = lstm_out.mean(dim=1)  # [batch, hidden_size]
 
-        # 拼接所有卷积层的输出特征
-        out = torch.cat((out1, out2, out3), dim=1)
+        # 动态融合
+        gate_cnn = torch.sigmoid(self.fusion_gate_cnn(cnn_feat))  # [batch, 1]
+        gate_lstm = torch.sigmoid(self.fusion_gate_lstm(lstm_feat))  # [batch, 1]
 
-        # 全连接层进行分类
-        logits = self.fc(out)
-
-        return logits
-
+        # 加权融合
+        final_feat = gate_cnn * cnn_feat + gate_lstm * lstm_feat  # [batch, hidden_size]
+        out = self.dropout(final_feat)
+        return out
 
 # 定义封装的模型
 class MyModel(torch.nn.Module):
-    def __init__(self, num_labels, dropout_prob):
+    def __init__(self, hidden_size, num_labels, dropout_prob):
         super(MyModel, self).__init__()
         self.bert = BertModel.from_pretrained(bert_path)
-        self.cnn = TextCNN(
+        self.model = SC_Hybrid(
             self.bert.config.hidden_size,
-            num_labels,
+            hidden_size,
             dropout_prob
         )
         self.dropout = torch.nn.Dropout(dropout_prob)
-        self.classifier = torch.nn.Linear(774, num_labels)
+        self.relu = torch.nn.ReLU()
+        self.fc = torch.nn.Linear(hidden_size, 256)
+        self.classifier = torch.nn.Linear(256, num_labels)
 
         # 冻结 BERT 参数
         # for param in self.bert.parameters():
@@ -92,17 +96,13 @@ class MyModel(torch.nn.Module):
             input_ids=input_ids,
             attention_mask=attention_mask
         )
-        pooled_output = outputs.pooler_output  # (batch_size, hidden_size)
+        hidden_states = outputs.last_hidden_state
+        out = self.model(hidden_states)
 
-        # 获取 BERT 的隐藏状态
-        hidden_states = outputs.last_hidden_state  # (batch_size, sequence_length, hidden_size)
-        cnn_features = self.cnn(hidden_states)  # (batch_size, hidden_size*3)
-
-        # 合并 BERT 的池化输出和 CNN 的特征
-        pooled_output = torch.cat((pooled_output, cnn_features), dim=1)  # (batch_size, hidden_size + 3*hidden_size)
-        pooled_output = self.dropout(pooled_output)
-
-        logits = self.classifier(pooled_output)
+        out = self.fc(out)
+        out = self.relu(out)
+        out = self.dropout(out)
+        logits = self.classifier(out)
 
         if labels is not None:
             loss_fct = torch.nn.CrossEntropyLoss()
@@ -140,7 +140,7 @@ class SarcasmClassificationDataset(Dataset):
         topic_text_content = topic_content.get('topicContent', '')
 
         # 拼接评论和话题内容
-        input_text = f"{review} [SEP] {topic_title} {topic_text_content}"
+        input_text = f"{review}[SEP]{topic_text_content}"
 
         # 使用BERT tokenizer编码
         encoding = self.tokenizer(
@@ -170,6 +170,29 @@ def load_topic_data(file_path):
     topic_dict = {item['topicId']: item for item in data}
     return topic_dict
 
+def plot_loss_acc(train_losses, test_losses, train_accuracies, test_accuracies, epoch, path):
+    epochs = range(1, epoch + 1)
+    plt.figure(figsize=(12, 4))
+
+    plt.subplot(1, 2, 1)
+    plt.plot(epochs, train_losses, 'b', label='Training Loss')
+    plt.plot(epochs, test_losses, 'r', label='Test Loss')
+    plt.title('Training Loss vs. Epochs')
+    plt.xlabel('Epochs')
+    plt.ylabel('Loss')
+    plt.legend()
+
+    plt.subplot(1, 2, 2)
+    plt.plot(epochs, train_accuracies, 'b', label='Train Accuracy')
+    plt.plot(epochs, test_accuracies, 'r', label='Test Accuracy')
+    plt.title('Test Accuracy vs. Epochs')
+    plt.xlabel('Epochs')
+    plt.ylabel('Accuracy')
+    plt.legend()
+
+    plt.tight_layout()
+    plt.savefig(path)
+
 # 主函数
 if __name__ == '__main__':
     # 加载数据
@@ -198,7 +221,7 @@ if __name__ == '__main__':
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, collate_fn=lambda x: x)
 
     # 定义模型
-    model = MyModel(num_labels=6, dropout_prob=dropout_prob)
+    model = MyModel(hidden_size=256 ,num_labels=6, dropout_prob=dropout_prob)
     model.to(device)
 
     # 定义优化器
@@ -324,7 +347,6 @@ if __name__ == '__main__':
     end_time = time.time()
     total_training_time = end_time - start_time
     print(f"Total training time: {total_training_time:.2f} seconds")
-
 
     # 加载最佳模型
     model.load_state_dict(torch.load(best_model_path))

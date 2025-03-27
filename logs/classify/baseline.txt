@@ -1,0 +1,7 @@
+Epoch 1/30, Train Loss: 0.7712, Train Acc: 73.98%, Test Loss: 0.6882, Test Acc: 75.34%
+Epoch 2/30, Train Loss: 0.6428, Train Acc: 76.96%, Test Loss: 0.6278, Test Acc: 77.70%
+Epoch 3/30, Train Loss: 0.5443, Train Acc: 80.64%, Test Loss: 0.7230, Test Acc: 73.93%
+Epoch 4/30, Train Loss: 0.4315, Train Acc: 84.69%, Test Loss: 0.7212, Test Acc: 74.12%
+Epoch 5/30, Train Loss: 0.3253, Train Acc: 88.61%, Test Loss: 0.7452, Test Acc: 75.21%
+Early stopping!
+F1 Score: 0.7496
