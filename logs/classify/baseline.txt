@@ -1,7 +1,7 @@
-Epoch 1/30, Train Loss: 0.7712, Train Acc: 73.98%, Test Loss: 0.6882, Test Acc: 75.34%
-Epoch 2/30, Train Loss: 0.6428, Train Acc: 76.96%, Test Loss: 0.6278, Test Acc: 77.70%
-Epoch 3/30, Train Loss: 0.5443, Train Acc: 80.64%, Test Loss: 0.7230, Test Acc: 73.93%
-Epoch 4/30, Train Loss: 0.4315, Train Acc: 84.69%, Test Loss: 0.7212, Test Acc: 74.12%
-Epoch 5/30, Train Loss: 0.3253, Train Acc: 88.61%, Test Loss: 0.7452, Test Acc: 75.21%
+Epoch 1/30, Train Loss: 0.7735, Train Acc: 74.42%, Test Loss: 0.6584, Test Acc: 76.17%
+Epoch 2/30, Train Loss: 0.6189, Train Acc: 77.87%, Test Loss: 0.6251, Test Acc: 77.83%
+Epoch 3/30, Train Loss: 0.5061, Train Acc: 81.88%, Test Loss: 0.6490, Test Acc: 76.49%
+Epoch 4/30, Train Loss: 0.3839, Train Acc: 86.58%, Test Loss: 0.7180, Test Acc: 74.31%
+Epoch 5/30, Train Loss: 0.2639, Train Acc: 91.28%, Test Loss: 0.7938, Test Acc: 76.17%
 Early stopping!
-F1 Score: 0.7496
+F1 Score: 0.7493

@@ -10,7 +10,7 @@ from sklearn.metrics import f1_score, confusion_matrix
 import seaborn as sns
 
 # 定义超参数
-batch_size = 16
+batch_size = 32
 learning_rate = 5e-5
 dropout_prob = 0.1
 patience_num = 3    # 早停阈值
@@ -82,7 +82,8 @@ class SarcasmClassificationDataset(Dataset):
         topic_text_content = topic_content.get('topicContent', '')
 
         # 拼接评论和话题内容
-        input_text = f"{review} [SEP] {topic_title} {topic_text_content}"
+        # input_text = f"{review} [SEP] {topic_title} {topic_text_content}"
+        input_text = f"{review}[SEP]{topic_text_content}"
 
         # 使用BERT tokenizer编码
         encoding = self.tokenizer(
