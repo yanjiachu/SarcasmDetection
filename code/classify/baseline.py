@@ -181,115 +181,115 @@ if __name__ == '__main__':
     best_accuracy = 0.0
 
     # 训练循环
-    print("Training...")
-    start_time = time.time()
-    for epoch in range(1, num_epochs + 1):
-        model.train()  # 设置模型为训练模式
-        total_loss = 0.0
-        total_correct = 0  # 统计训练集正确预测数
-        total_samples = 0  # 统计训练集总样本数
-
-        # 训练每一批次
-        for batch in train_loader:
-            # 合并批次数据
-            input_ids = []
-            attention_masks = []
-            labels = []
-            for sample in batch:
-                if sample is not None:
-                    input_ids.append(sample['input_ids'])
-                    attention_masks.append(sample['attention_mask'])
-                    labels.append(sample['label'])
-
-            if not input_ids:
-                continue
-
-            input_ids = torch.stack(input_ids).to(device)
-            attention_masks = torch.stack(attention_masks).to(device)
-            labels = torch.stack(labels).to(device)
-
-            optimizer.zero_grad()
-
-            # 获取 logits 和 loss
-            logits, loss = model(input_ids, attention_masks, labels=labels)
-            loss.backward()
-            optimizer.step()
-
-            total_loss += loss.item()
-
-            # 计算训练集评论级别准确率
-            predictions = torch.argmax(logits, dim=1)
-            total_correct += (predictions == labels).sum().item()
-            total_samples += labels.size(0)
-
-        # 计算并保存训练集损失和准确率
-        avg_train_loss = total_loss / len(train_loader)
-        train_losses.append(avg_train_loss)
-        train_accuracy = total_correct / total_samples
-        train_accuracies.append(train_accuracy)
-
-        # 测试阶段
-        model.eval()
-        true_labels = []
-        pred_labels = []
-        total_test_loss = 0.0  # 统计测试集损失
-
-        with torch.no_grad():
-            for batch in test_loader:
-                input_ids = []
-                attention_masks = []
-                labels = []
-                for sample in batch:
-                    if sample is not None:
-                        input_ids.append(sample['input_ids'])
-                        attention_masks.append(sample['attention_mask'])
-                        labels.append(sample['label'])
-
-                if not input_ids:
-                    continue
-
-                input_ids = torch.stack(input_ids).to(device)
-                attention_masks = torch.stack(attention_masks).to(device)
-                labels = torch.stack(labels).to(device)
-
-                # 获取 logits 和 loss
-                logits, test_loss = model(input_ids, attention_masks, labels=labels)
-                predictions = torch.argmax(logits, dim=1)
-
-                # 累加测试集损失
-                total_test_loss += test_loss.item()
-
-                # 保存真实标签和预测标签
-                true_labels.extend(labels.cpu().numpy())
-                pred_labels.extend(predictions.cpu().numpy())
-
-        # 计算测试集损失和准确率
-        avg_test_loss = total_test_loss / len(test_loader)
-        test_losses.append(avg_test_loss)
-        test_accuracy = np.mean(np.array(true_labels) == np.array(pred_labels))
-        test_accuracies.append(test_accuracy)
-
-        # 打印结果
-        print(f"Epoch {epoch}/{num_epochs}, "
-              f"Train Loss: {avg_train_loss:.4f}, "
-              f"Train Acc: {train_accuracy * 100:.2f}%, "
-              f"Test Loss: {avg_test_loss:.4f}, "
-              f"Test Acc: {test_accuracy * 100:.2f}%")
-
-        # 早停机制
-        if test_accuracy > best_accuracy:
-            patience = patience_num
-            best_accuracy = test_accuracy
-            torch.save(model.state_dict(), best_model_path)
-        else:
-            patience -= 1
-            if patience == 0:
-                print("Early stopping!")
-                break
-
-    end_time = time.time()
-    total_training_time = end_time - start_time
-    print(f"Total training time: {total_training_time:.2f} seconds")
+    # print("Training...")
+    # start_time = time.time()
+    # for epoch in range(1, num_epochs + 1):
+    #     model.train()  # 设置模型为训练模式
+    #     total_loss = 0.0
+    #     total_correct = 0  # 统计训练集正确预测数
+    #     total_samples = 0  # 统计训练集总样本数
+    #
+    #     # 训练每一批次
+    #     for batch in train_loader:
+    #         # 合并批次数据
+    #         input_ids = []
+    #         attention_masks = []
+    #         labels = []
+    #         for sample in batch:
+    #             if sample is not None:
+    #                 input_ids.append(sample['input_ids'])
+    #                 attention_masks.append(sample['attention_mask'])
+    #                 labels.append(sample['label'])
+    #
+    #         if not input_ids:
+    #             continue
+    #
+    #         input_ids = torch.stack(input_ids).to(device)
+    #         attention_masks = torch.stack(attention_masks).to(device)
+    #         labels = torch.stack(labels).to(device)
+    #
+    #         optimizer.zero_grad()
+    #
+    #         # 获取 logits 和 loss
+    #         logits, loss = model(input_ids, attention_masks, labels=labels)
+    #         loss.backward()
+    #         optimizer.step()
+    #
+    #         total_loss += loss.item()
+    #
+    #         # 计算训练集评论级别准确率
+    #         predictions = torch.argmax(logits, dim=1)
+    #         total_correct += (predictions == labels).sum().item()
+    #         total_samples += labels.size(0)
+    #
+    #     # 计算并保存训练集损失和准确率
+    #     avg_train_loss = total_loss / len(train_loader)
+    #     train_losses.append(avg_train_loss)
+    #     train_accuracy = total_correct / total_samples
+    #     train_accuracies.append(train_accuracy)
+    #
+    #     # 测试阶段
+    #     model.eval()
+    #     true_labels = []
+    #     pred_labels = []
+    #     total_test_loss = 0.0  # 统计测试集损失
+    #
+    #     with torch.no_grad():
+    #         for batch in test_loader:
+    #             input_ids = []
+    #             attention_masks = []
+    #             labels = []
+    #             for sample in batch:
+    #                 if sample is not None:
+    #                     input_ids.append(sample['input_ids'])
+    #                     attention_masks.append(sample['attention_mask'])
+    #                     labels.append(sample['label'])
+    #
+    #             if not input_ids:
+    #                 continue
+    #
+    #             input_ids = torch.stack(input_ids).to(device)
+    #             attention_masks = torch.stack(attention_masks).to(device)
+    #             labels = torch.stack(labels).to(device)
+    #
+    #             # 获取 logits 和 loss
+    #             logits, test_loss = model(input_ids, attention_masks, labels=labels)
+    #             predictions = torch.argmax(logits, dim=1)
+    #
+    #             # 累加测试集损失
+    #             total_test_loss += test_loss.item()
+    #
+    #             # 保存真实标签和预测标签
+    #             true_labels.extend(labels.cpu().numpy())
+    #             pred_labels.extend(predictions.cpu().numpy())
+    #
+    #     # 计算测试集损失和准确率
+    #     avg_test_loss = total_test_loss / len(test_loader)
+    #     test_losses.append(avg_test_loss)
+    #     test_accuracy = np.mean(np.array(true_labels) == np.array(pred_labels))
+    #     test_accuracies.append(test_accuracy)
+    #
+    #     # 打印结果
+    #     print(f"Epoch {epoch}/{num_epochs}, "
+    #           f"Train Loss: {avg_train_loss:.4f}, "
+    #           f"Train Acc: {train_accuracy * 100:.2f}%, "
+    #           f"Test Loss: {avg_test_loss:.4f}, "
+    #           f"Test Acc: {test_accuracy * 100:.2f}%")
+    #
+    #     # 早停机制
+    #     if test_accuracy > best_accuracy:
+    #         patience = patience_num
+    #         best_accuracy = test_accuracy
+    #         torch.save(model.state_dict(), best_model_path)
+    #     else:
+    #         patience -= 1
+    #         if patience == 0:
+    #             print("Early stopping!")
+    #             break
+    #
+    # end_time = time.time()
+    # total_training_time = end_time - start_time
+    # print(f"Total training time: {total_training_time:.2f} seconds")
 
     # 加载最佳模型
     model.load_state_dict(torch.load(best_model_path))

@@ -274,7 +274,7 @@ if __name__ == '__main__':
 
     end_time = time.time()
     total_training_time = end_time - start_time
-    print(f"Total training time: {total_training_time:.2f} seconds")\
+    print(f"Total training time: {total_training_time:.2f} seconds")
 
     # 加载最佳模型并绘制ROC曲线
     model.load_state_dict(torch.load(best_model_path))
