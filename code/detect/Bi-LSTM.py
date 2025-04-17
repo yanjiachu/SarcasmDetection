@@ -10,8 +10,8 @@ from sklearn.metrics import roc_curve, auc, precision_recall_fscore_support
 
 # 定义超参数
 batch_size = 16
-learning_rate = 5e-5
-dropout_prob = 0.05
+learning_rate = 2e-5
+dropout_prob = 0.1
 patience_num = 5    # 早停阈值
 num_epochs = 30
 train_size = 0.9
@@ -301,5 +301,6 @@ if __name__ == '__main__':
 
     # 输出结果
     print(f"AUC: {roc_auc:.4f}")
+    print(f"Precision: {precision:.4f}")
     print(f"Recall: {recall:.4f}")
     print(f"F1 Score: {f1:.4f}")

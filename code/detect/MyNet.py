@@ -20,7 +20,7 @@ train_path = '../../data/train.json'
 train_topic_path = '../../data/train_topic.json'
 bert_path = '../../bert-base-chinese'
 # bert_path = '../../chinese-macbert-base'
-best_model_path = '../../models/detect/bert_TC_content.pth'
+best_model_path = '../../models/detect/SC_Hybrid.pth'
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(f"device: {device}")
 

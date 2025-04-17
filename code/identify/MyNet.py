@@ -8,7 +8,7 @@ from sklearn.model_selection import train_test_split
 
 # 定义超参数
 batch_size = 32
-learning_rate = 2e-5
+learning_rate = 1e-5
 dropout_prob = 0.25
 patience_num = 3    # 早停阈值
 num_epochs = 30

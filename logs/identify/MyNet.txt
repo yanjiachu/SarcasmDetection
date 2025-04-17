@@ -44,18 +44,20 @@ Epoch 11/30, Train Loss: 0.0021, Train Acc: 91.98%, Test Loss: 0.0390, Test Acc:
 Early stopping!
 Total training time: 5309.01 seconds
 
-lert:([1.1, 1.0, 0.9])
-Epoch 1/30, Train Loss: 0.0433, Train Acc: 40.25%, Test Loss: 0.0203, Test Acc: 52.91%
-Epoch 2/30, Train Loss: 0.0179, Train Acc: 55.75%, Test Loss: 0.0176, Test Acc: 60.89%
-Epoch 3/30, Train Loss: 0.0136, Train Acc: 63.79%, Test Loss: 0.0180, Test Acc: 62.43%
-Epoch 4/30, Train Loss: 0.0097, Train Acc: 71.30%, Test Loss: 0.0227, Test Acc: 61.41%
-Epoch 5/30, Train Loss: 0.0069, Train Acc: 78.44%, Test Loss: 0.0257, Test Acc: 63.00%
-Epoch 6/30, Train Loss: 0.0054, Train Acc: 82.14%, Test Loss: 0.0285, Test Acc: 63.07%
-Epoch 7/30, Train Loss: 0.0040, Train Acc: 86.40%, Test Loss: 0.0309, Test Acc: 62.49%
-Epoch 8/30, Train Loss: 0.0032, Train Acc: 88.33%, Test Loss: 0.0327, Test Acc: 62.11%
-Epoch 9/30, Train Loss: 0.0027, Train Acc: 89.90%, Test Loss: 0.0376, Test Acc: 63.19%
-Epoch 10/30, Train Loss: 0.0021, Train Acc: 92.44%, Test Loss: 0.0353, Test Acc: 63.00%
-Epoch 11/30, Train Loss: 0.0018, Train Acc: 93.12%, Test Loss: 0.0405, Test Acc: 63.83%
-Epoch 12/30, Train Loss: 0.0015, Train Acc: 94.16%, Test Loss: 0.0417, Test Acc: 63.83%
-Epoch 13/30, Train Loss: 0.0015, Train Acc: 94.98%, Test Loss: 0.0410, Test Acc: 63.39%
-Epoch 14/30, Train Loss: 0.0014, Train Acc: 95.28%, Test Loss: 0.0499, Test Acc: 62.75%
+lert:([1.1, 1.0, 0.8])
+Epoch 1/30, Train Loss: 0.0551, Train Acc: 37.85%, Test Loss: 0.0224, Test Acc: 47.03%
+Epoch 2/30, Train Loss: 0.0205, Train Acc: 50.87%, Test Loss: 0.0214, Test Acc: 50.54%
+Epoch 3/30, Train Loss: 0.0164, Train Acc: 59.67%, Test Loss: 0.0197, Test Acc: 59.68%
+Epoch 4/30, Train Loss: 0.0133, Train Acc: 64.97%, Test Loss: 0.0208, Test Acc: 60.83%
+Epoch 5/30, Train Loss: 0.0104, Train Acc: 70.84%, Test Loss: 0.0229, Test Acc: 60.19%
+Epoch 6/30, Train Loss: 0.0080, Train Acc: 75.49%, Test Loss: 0.0269, Test Acc: 61.28%
+Epoch 7/30, Train Loss: 0.0064, Train Acc: 79.56%, Test Loss: 0.0288, Test Acc: 62.81%
+Epoch 8/30, Train Loss: 0.0052, Train Acc: 82.55%, Test Loss: 0.0320, Test Acc: 62.36%
+Epoch 9/30, Train Loss: 0.0041, Train Acc: 85.37%, Test Loss: 0.0367, Test Acc: 64.03%
+Epoch 10/30, Train Loss: 0.0036, Train Acc: 87.00%, Test Loss: 0.0343, Test Acc: 64.03%
+Epoch 11/30, Train Loss: 0.0030, Train Acc: 88.86%, Test Loss: 0.0365, Test Acc: 64.15%
+Epoch 12/30, Train Loss: 0.0027, Train Acc: 90.22%, Test Loss: 0.0379, Test Acc: 63.83%
+Epoch 13/30, Train Loss: 0.0025, Train Acc: 91.19%, Test Loss: 0.0410, Test Acc: 63.58%
+Epoch 14/30, Train Loss: 0.0020, Train Acc: 92.02%, Test Loss: 0.0402, Test Acc: 63.90%
+Early stopping!
+Total training time: 6753.26 seconds
