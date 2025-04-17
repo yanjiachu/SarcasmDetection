@@ -9,7 +9,7 @@ from sklearn.model_selection import train_test_split
 # 定义超参数
 batch_size = 32
 learning_rate = 2e-5
-dropout_prob = 0.1
+dropout_prob = 0.25
 patience_num = 3    # 早停阈值
 num_epochs = 30
 train_size = 0.9
@@ -21,37 +21,96 @@ best_model_path = '../../models/identify/my.pth'
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(f"device: {device}")
 
+# 定义标签
+label2id = {'B-ORG': 0, 'I-ORG': 1, 'O': 2}
+
+class SC_Hybrid(torch.nn.Module):
+    def __init__(self, input_size, hidden_size, num_labels, dropout_prob):
+        super(SC_Hybrid, self).__init__()
+
+        # CNN 分支
+        self.conv3 = torch.nn.Conv1d(input_size, hidden_size, kernel_size=3, padding=1)
+        self.conv5 = torch.nn.Conv1d(input_size, hidden_size, kernel_size=5, padding=2)
+        self.conv7 = torch.nn.Conv1d(input_size, hidden_size, kernel_size=7, padding=3)
+
+        # CNN 特征处理层 (不再需要降维，保持序列长度)
+        self.cnn_proj = torch.nn.Linear(hidden_size * 3, hidden_size)
+
+        # Bi-LSTM 分支
+        self.lstm = torch.nn.LSTM(input_size, hidden_size // 2, num_layers=2, bidirectional=True, batch_first=True)
+
+        # 动态融合门 (对每个token单独计算)
+        self.fusion_gate_cnn = torch.nn.Linear(hidden_size, 1)  # 为每个token的CNN特征计算权重
+        self.fusion_gate_lstm = torch.nn.Linear(hidden_size, 1)  # 为每个token的LSTM特征计算权重
+
+        # 分类器 (对每个token进行分类)
+        self.classifier = torch.nn.Linear(hidden_size, num_labels)
+
+        self.dropout = torch.nn.Dropout(dropout_prob)
+
+    def forward(self, x):
+        # 输入形状: [batch_size, seq_len, input_size]
+
+        # CNN 分支
+        x_cnn = x.transpose(1, 2)  # [batch, input_size, seq_len]
+        cnn3 = torch.relu(self.conv3(x_cnn)).transpose(1, 2)  # [batch, seq_len, hidden_size]
+        cnn5 = torch.relu(self.conv5(x_cnn)).transpose(1, 2)  # [batch, seq_len, hidden_size]
+        cnn7 = torch.relu(self.conv7(x_cnn)).transpose(1, 2)  # [batch, seq_len, hidden_size]
+        cnn_feat = torch.cat([cnn3, cnn5, cnn7], dim=2)  # [batch, seq_len, hidden_size * 3]
+        cnn_feat = self.cnn_proj(cnn_feat)  # [batch, seq_len, hidden_size]
+
+        # Bi-LSTM 分支
+        lstm_feat, _ = self.lstm(x)  # [batch, seq_len, hidden_size]
+
+        # 动态融合 (对每个token单独计算)
+        gate_cnn = torch.sigmoid(self.fusion_gate_cnn(cnn_feat))  # [batch, seq_len, 1]
+        gate_lstm = torch.sigmoid(self.fusion_gate_lstm(lstm_feat))  # [batch, seq_len, 1]
+
+        # 加权融合
+        final_feat = gate_cnn * cnn_feat + gate_lstm * lstm_feat  # [batch, seq_len, hidden_size]
+        final_feat = self.dropout(final_feat)
+
+        # 对每个token进行分类
+        logits = self.classifier(final_feat)  # [batch, seq_len, num_labels]
+
+        return logits
+
+
 # 定义封装的模型
 class MyModel(torch.nn.Module):
-    def __init__(self, num_labels, dropout_prob):
+    def __init__(self, hidden_size, num_labels, dropout_prob):
         super(MyModel, self).__init__()
         self.bert = BertModel.from_pretrained(model_path)
-        self.dropout = torch.nn.Dropout(dropout_prob)
-        self.classifier = torch.nn.Linear(self.bert.config.hidden_size, num_labels)
+        self.hybrid = SC_Hybrid(
+            input_size=self.bert.config.hidden_size,
+            hidden_size=hidden_size,
+            num_labels=num_labels,
+            dropout_prob=dropout_prob
+        )
 
-        # 冻结 BERT 参数
-        # for param in self.bert.parameters():
-        #     param.requires_grad = False
+        # 定义标签权重（B/I/O）
+        self.loss_weights = torch.tensor([1.0, 1.0, 1.0]).to(device)
 
     def forward(self, input_ids, attention_mask, labels=None):
         outputs = self.bert(
             input_ids=input_ids,
             attention_mask=attention_mask
         )
-        pooled_output = outputs.last_hidden_state
-        pooled_output = self.dropout(pooled_output)
-        logits = self.classifier(pooled_output)
+        hidden_states = outputs.last_hidden_state  # [batch_size, seq_len, hidden_size]
+
+        # 通过SC_Hybrid模块
+        logits = self.hybrid(hidden_states)  # [batch_size, seq_len, num_labels]
 
         if labels is not None:
-            loss_fct = torch.nn.CrossEntropyLoss()
-            loss = loss_fct(logits.view(-1, self.classifier.out_features), labels.view(-1))
+            loss_fct = torch.nn.CrossEntropyLoss(weight=self.loss_weights)
+            # 只计算有效token的loss (忽略padding部分)
+            active_loss = attention_mask.view(-1) == 1
+            active_logits = logits.view(-1, self.hybrid.classifier.out_features)[active_loss]
+            active_labels = labels.view(-1)[active_loss]
+            loss = loss_fct(active_logits, active_labels)
             return logits, loss
         else:
             return logits
-
-
-# 定义标签
-label2id = {'B-ORG': 0, 'I-ORG': 1, 'O': 2}
 
 
 class SarcasmTargetDataset(Dataset):
@@ -181,7 +240,7 @@ if __name__ == '__main__':
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
 
     # 定义模型
-    model = MyModel(num_labels=len(label2id), dropout_prob=dropout_prob)
+    model = MyModel(hidden_size=768, num_labels=len(label2id), dropout_prob=dropout_prob)
     model.to(device)
 
     # 定义优化器
@@ -195,7 +254,7 @@ if __name__ == '__main__':
 
     # 早停机制
     patience = patience_num
-    best_loss = float('inf')
+    best_acc = 0
 
     # 训练循环
     print("Training...")
@@ -288,10 +347,10 @@ if __name__ == '__main__':
               f"Test Acc: {comment_accuracy * 100:.2f}%")
 
         # 早停机制
-        if avg_test_loss < best_loss:
+        if comment_accuracy > best_acc:
             patience = patience_num
-            best_loss = avg_test_loss
-            torch.save(model.state_dict(), best_model_path)
+            best_acc = comment_accuracy
+            # torch.save(model.state_dict(), best_model_path)
         else:
             patience -= 1
             if patience == 0:

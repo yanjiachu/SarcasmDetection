@@ -7,3 +7,4 @@ Epoch 6/30, Train Loss: 0.0042, Train Acc: 79.72%, Test Loss: 0.0180, Test Acc: 
 Epoch 7/30, Train Loss: 0.0032, Train Acc: 83.71%, Test Loss: 0.0214, Test Acc: 61.66%
 Epoch 8/30, Train Loss: 0.0026, Train Acc: 86.66%, Test Loss: 0.0233, Test Acc: 60.32%
 Early stopping!
+Total training time: 3213.70 seconds
