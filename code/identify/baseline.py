@@ -17,6 +17,7 @@ test_size = 0.1
 train_path = '../../data/train.json'
 train_topic_path = '../../data/train_topic.json'
 model_path = '../../bert-base-chinese'
+# model_path = '../../chinese-lert-base'
 best_model_path = '../../models/identify/bert.pth'
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(f"device: {device}")
