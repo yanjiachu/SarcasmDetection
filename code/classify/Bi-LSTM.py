@@ -305,34 +305,39 @@ if __name__ == '__main__':
             true_labels.extend(labels.cpu().numpy())
             pred_labels.extend(predictions.cpu().numpy())
 
-    # 计算F1值
-    f1 = f1_score(true_labels, pred_labels, average='weighted')
-    print(f"F1 Score: {f1:.4f}")
+    # 计算所有F1类型
+    macro_f1 = f1_score(true_labels, pred_labels, average='macro')
+    micro_f1 = f1_score(true_labels, pred_labels, average='micro')
+    weighted_f1 = f1_score(true_labels, pred_labels, average='weighted')
 
-    # 生成混淆矩阵
-    cm = confusion_matrix(true_labels, pred_labels, labels=range(6))
+    print(f"Macro-F1: {macro_f1:.4f}")
+    print(f"Micro-F1: {micro_f1:.4f}")
+    print(f"Weighted-F1: {weighted_f1:.4f}")
 
-    # 输出混淆矩阵
-    plt.figure(figsize=(12, 10))
-    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues',
-                xticklabels=[1, 2, 3, 4, 5, 6],
-                yticklabels=[1, 2, 3, 4, 5, 6])
-    plt.xlabel('Predicted Type')
-    plt.ylabel('True Type')
-    plt.title('Confusion Matrix of Sarcasm Types')
-    plt.savefig(pic_path)
-    plt.close()
-
-    # 归一化混淆矩阵
-    cm_normalized = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
-
-    # 输出归一化后的混淆矩阵
-    plt.figure(figsize=(12, 10))
-    sns.heatmap(cm_normalized, annot=True, fmt='.2f', cmap='Blues',
-                xticklabels=[1, 2, 3, 4, 5, 6],
-                yticklabels=[1, 2, 3, 4, 5, 6])
-    plt.xlabel('Predicted Type')
-    plt.ylabel('True Type')
-    plt.title('Normalized Confusion Matrix of Sarcasm Types')
-    plt.savefig(pic_path.replace('.png', '_normalized.png'))
-    plt.close()
+    # # 生成混淆矩阵
+    # cm = confusion_matrix(true_labels, pred_labels, labels=range(6))
+    #
+    # # 输出混淆矩阵
+    # plt.figure(figsize=(12, 10))
+    # sns.heatmap(cm, annot=True, fmt='d', cmap='Blues',
+    #             xticklabels=[1, 2, 3, 4, 5, 6],
+    #             yticklabels=[1, 2, 3, 4, 5, 6])
+    # plt.xlabel('Predicted Type')
+    # plt.ylabel('True Type')
+    # plt.title('Confusion Matrix of Sarcasm Types')
+    # plt.savefig(pic_path)
+    # plt.close()
+    #
+    # # 归一化混淆矩阵
+    # cm_normalized = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
+    #
+    # # 输出归一化后的混淆矩阵
+    # plt.figure(figsize=(12, 10))
+    # sns.heatmap(cm_normalized, annot=True, fmt='.2f', cmap='Blues',
+    #             xticklabels=[1, 2, 3, 4, 5, 6],
+    #             yticklabels=[1, 2, 3, 4, 5, 6])
+    # plt.xlabel('Predicted Type')
+    # plt.ylabel('True Type')
+    # plt.title('Normalized Confusion Matrix of Sarcasm Types')
+    # plt.savefig(pic_path.replace('.png', '_normalized.png'))
+    # plt.close()

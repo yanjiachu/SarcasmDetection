@@ -5,4 +5,6 @@ Epoch 4/30, Train Loss: 0.3760, Train Acc: 86.85%, Test Loss: 0.7086, Test Acc: 
 Epoch 5/30, Train Loss: 0.2524, Train Acc: 91.65%, Test Loss: 0.7950, Test Acc: 76.49%
 Early stopping!
 Total training time: 1617.57 seconds
-F1 Score: 0.7618
+Macro-F1: 0.4916
+Micro-F1: 0.7840
+Weighted-F1: 0.7618

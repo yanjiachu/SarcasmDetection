@@ -4,4 +4,6 @@ Epoch 3/30, Train Loss: 0.4600, Train Acc: 83.48%, Test Loss: 0.6893, Test Acc: 
 Epoch 4/30, Train Loss: 0.3253, Train Acc: 88.64%, Test Loss: 0.7619, Test Acc: 74.31%
 Epoch 5/30, Train Loss: 0.2136, Train Acc: 93.04%, Test Loss: 0.8727, Test Acc: 74.38%
 Early stopping!
-F1 Score: 0.7597
+Macro-F1: 0.5184
+Micro-F1: 0.7827
+Weighted-F1: 0.7597

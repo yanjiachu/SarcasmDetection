@@ -6,3 +6,6 @@ Epoch 5/30, Train Loss: 0.0058, Train Acc: 74.80%, Test Loss: 0.0174, Test Acc: 
 Epoch 6/30, Train Loss: 0.0042, Train Acc: 79.88%, Test Loss: 0.0196, Test Acc: 62.56%
 Epoch 7/30, Train Loss: 0.0034, Train Acc: 83.49%, Test Loss: 0.0221, Test Acc: 60.06%
 Early stopping!
+Precision: 0.6676
+Recall:    0.5967
+F1:        0.6302
