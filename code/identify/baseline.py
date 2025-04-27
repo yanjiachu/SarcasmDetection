@@ -16,9 +16,9 @@ train_size = 0.9
 test_size = 0.1
 train_path = '../../data/train.json'
 train_topic_path = '../../data/train_topic.json'
-# model_path = '../../bert-base-chinese'
-model_path = '../../chinese-lert-base'
-best_model_path = '../../models/identify/lert.pth'
+model_path = '../../bert-base-chinese'
+# model_path = '../../chinese-lert-base'
+best_model_path = '../../models/identify/bert.pth'
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(f"device: {device}")
 
@@ -232,6 +232,49 @@ def compute_exact_match_f1(true_labels, pred_labels, offsets_mapping, original_t
         "FP": fp,
         "FN": fn
     }
+
+
+def compute_dice_score(true_labels, pred_labels, label2id):
+    id2label = {v: k for k, v in label2id.items()}
+
+    # Extract unique predicted and true spans
+    def extract_unique_spans(labels):
+        spans = set()
+        current_span = []
+        for label_id in labels:
+            label = id2label.get(label_id, 'O')
+            if label == 'B-ORG':
+                if current_span:
+                    spans.add(tuple(current_span))
+                current_span = [label_id]
+            elif label == 'I-ORG' and current_span:
+                current_span.append(label_id)
+            else:
+                if current_span:
+                    spans.add(tuple(current_span))
+                current_span = []
+        if current_span:
+            spans.add(tuple(current_span))
+        return spans
+
+    total_true_unique = 0
+    total_pred_unique = 0
+    total_common = 0
+
+    for true, pred in zip(true_labels, pred_labels):
+        true_spans = extract_unique_spans(true)
+        pred_spans = extract_unique_spans(pred)
+
+        total_true_unique += len(true_spans)
+        total_pred_unique += len(pred_spans)
+        total_common += len(true_spans & pred_spans)
+
+    # Avoid division by zero
+    if total_true_unique + total_pred_unique == 0:
+        return 0.0
+
+    dice_score = 2 * total_common / (total_true_unique + total_pred_unique)
+    return dice_score
 
 # 主函数
 if __name__ == '__main__':
@@ -455,3 +498,7 @@ if __name__ == '__main__':
     print(f"Precision: {metrics['Exact Match Precision']:.4f}")
     print(f"Recall:    {metrics['Exact Match Recall']:.4f}")
     print(f"F1:        {metrics['Exact Match F1']:.4f}")
+
+    # 计算DICE
+    dice_score = compute_dice_score(true_labels, pred_labels, label2id)
+    print(f"DICE Score: {dice_score:.4f}")
