@@ -12,7 +12,6 @@
 ## 数据集
 
 ### train.json
-路径：../data/train.json
 
 包含超过一万条微博评论，每条微博评论有相关联的原帖话题。
 
@@ -38,7 +37,6 @@
 ```
 
 ### train_topic.json
-路径：../data/train_topic.json
 
 包含40个微博话题，每条都包含话题的标题和内容。
 
