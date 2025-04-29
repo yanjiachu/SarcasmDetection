@@ -110,7 +110,7 @@ class MyDataset(Dataset):
         topic_text_content = topic_content.get('topicContent', '')
 
         # 拼接评论和话题内容
-        input_text = f"{review} [SEP] {topic_title} {topic_text_content}"
+        input_text = f"{review} [SEP] {topic_text_content}"
 
         # 使用BERT tokenizer编码
         encoding = self.tokenizer(
