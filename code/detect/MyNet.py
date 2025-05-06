@@ -19,7 +19,6 @@ test_size = 0.1
 train_path = '../../data/train.json'
 train_topic_path = '../../data/train_topic.json'
 bert_path = '../../bert-base-chinese'
-# bert_path = '../../chinese-macbert-base'
 best_model_path = '../../models/detect/SC_Hybrid.pth'
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(f"device: {device}")
@@ -34,7 +33,7 @@ class SC_Hybrid(torch.nn.Module):
         self.conv7 = torch.nn.Conv1d(input_size, hidden_size, kernel_size=7, padding=3)
 
         # CNN 特征降维层
-        self.cnn_fc = torch.nn.Linear(hidden_size * 3, hidden_size)  # 将 CNN 特征从 768 降维到 256
+        self.cnn_fc = torch.nn.Linear(hidden_size * 3, hidden_size)
 
         # Bi-LSTM 分支
         self.lstm = torch.nn.LSTM(input_size, hidden_size // 2, num_layers=2, bidirectional=True, batch_first=True)
@@ -327,6 +326,7 @@ if __name__ == '__main__':
     # 计算ROC和AUC
     fpr, tpr, _ = roc_curve(true_labels, pred_probs)
     roc_auc = auc(fpr, tpr)
+    np.savez('../../ROC/CSH_Net.npz', fpr=fpr, tpr=tpr, auc=roc_auc)
 
     # 绘制ROC曲线
     # plot_roc_curve(fpr, tpr, roc_auc, path=f'../../ROC/all_Linear.png')

@@ -35,7 +35,7 @@ class TextCNN(torch.nn.Module):
             torch.nn.Conv1d(hidden_size, hidden_size, kernel_size=3, padding=1),
             torch.nn.ReLU(),
         )
-        self.classifier = torch.nn.Linear(hidden_size, num_classes)
+        self.fc = torch.nn.Linear(hidden_size, num_classes)
         self.dropout = torch.nn.Dropout(dropout_prob)
         self.relu = torch.nn.ReLU()
 
@@ -44,7 +44,7 @@ class TextCNN(torch.nn.Module):
         out = self.conv1(x)
         # 全局最大池化，保留最重要的特征
         out = torch.max(out, dim=-1)[0]
-        logits = self.classifier(out)
+        logits = self.fc(out)
         return logits
 
 # 定义封装的模型
@@ -300,9 +300,10 @@ if __name__ == '__main__':
     # 计算ROC和AUC
     fpr, tpr, _ = roc_curve(true_labels, pred_probs)
     roc_auc = auc(fpr, tpr)
+    np.savez('../../ROC/cnn.npz', fpr=fpr, tpr=tpr, auc=roc_auc)
 
     # 绘制ROC曲线
-    plot_roc_curve(fpr, tpr, roc_auc, path=f'../../ROC/cnn.png')
+    # plot_roc_curve(fpr, tpr, roc_auc, path=f'../../ROC/cnn.png')
 
     # 计算召回率、F1分数等指标
     precision, recall, f1, _ = precision_recall_fscore_support(true_labels, pred_labels, average='binary')

@@ -5,4 +5,5 @@ chinese-macbert-base/
 training_curves/
 word2vec/
 models/
+ROC/
 test.py

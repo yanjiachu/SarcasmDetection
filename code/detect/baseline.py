@@ -32,20 +32,6 @@ class MyModel(torch.nn.Module):
         self.dropout = torch.nn.Dropout(dropout_prob)
         self.classifier = torch.nn.Linear(self.bert.config.hidden_size, num_labels)
 
-        # 冻结 BERT 参数，除了最后1层
-        # for name, param in self.bert.named_parameters():
-        #     if 'encoder.layer.11' in name:
-        #         param.requires_grad = True
-        #     else:
-        #         param.requires_grad = False
-
-        # 冻结 BERT 参数，除了最后2层
-        # for name, param in self.bert.named_parameters():
-        #     if 'encoder.layer.11' in name or 'encoder.layer.10' in name:
-        #         param.requires_grad = True
-        #     else:
-        #         param.requires_grad = False
-
         # 冻结 BERT 所有参数
         # for param in self.bert.parameters():
         #     param.requires_grad = False
@@ -126,13 +112,13 @@ def plot_roc_curve(fpr, tpr, roc_auc, path):
     plt.figure()
     plt.plot(fpr, tpr, color='darkorange', lw=2, label=f'ROC curve (AUC = {roc_auc:.2f})')
     plt.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--')
-    plt.xlim([0.0, 1.1])
-    plt.ylim([0.0, 1.1])
+    plt.xlim([0.0, 1.0])
+    plt.ylim([0.0, 1.0])
     plt.xlabel('False Positive Rate')
     plt.ylabel('True Positive Rate')
     plt.title('Receiver Operating Characteristic')
     plt.legend(loc="lower right")
-    # plt.savefig(path)
+    plt.savefig(path)
     plt.show()
     plt.close()
 
@@ -284,9 +270,10 @@ if __name__ == '__main__':
     # 计算ROC和AUC
     fpr, tpr, _ = roc_curve(true_labels, pred_probs)
     roc_auc = auc(fpr, tpr)
+    np.savez('../../ROC/baseline.npz', fpr=fpr, tpr=tpr, auc=roc_auc)
 
     # 绘制ROC曲线
-    plot_roc_curve(fpr, tpr, roc_auc, path=f'../../ROC/all_Linear.png')
+    plot_roc_curve(fpr, tpr, roc_auc, path=f'../../ROC/baseline.png')
 
     # 计算召回率、F1分数等指标
     precision, recall, f1, _ = precision_recall_fscore_support(true_labels, pred_labels, average='binary')
