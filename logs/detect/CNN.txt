@@ -1,33 +1,10 @@
-Epoch 1/30, Train Loss: 0.6359, Train Accuracy: 65.42%, Test Loss: 0.5875, Test Accuracy: 68.52%
-Epoch 2/30, Train Loss: 0.5836, Train Accuracy: 69.38%, Test Loss: 0.5466, Test Accuracy: 72.16%
-Epoch 3/30, Train Loss: 0.5491, Train Accuracy: 71.73%, Test Loss: 0.5223, Test Accuracy: 73.31%
-Epoch 4/30, Train Loss: 0.5302, Train Accuracy: 73.00%, Test Loss: 0.5169, Test Accuracy: 73.60%
-Epoch 5/30, Train Loss: 0.5181, Train Accuracy: 74.19%, Test Loss: 0.5223, Test Accuracy: 73.52%
-Epoch 6/30, Train Loss: 0.5112, Train Accuracy: 74.54%, Test Loss: 0.5041, Test Accuracy: 74.66%
-Epoch 7/30, Train Loss: 0.5038, Train Accuracy: 74.94%, Test Loss: 0.5008, Test Accuracy: 74.70%
-Epoch 8/30, Train Loss: 0.4978, Train Accuracy: 75.48%, Test Loss: 0.4957, Test Accuracy: 75.21%
-Epoch 9/30, Train Loss: 0.4903, Train Accuracy: 76.00%, Test Loss: 0.4934, Test Accuracy: 75.42%
-Epoch 10/30, Train Loss: 0.4863, Train Accuracy: 76.19%, Test Loss: 0.4972, Test Accuracy: 75.08%
-Epoch 11/30, Train Loss: 0.4771, Train Accuracy: 76.84%, Test Loss: 0.5119, Test Accuracy: 73.77%
-Epoch 12/30, Train Loss: 0.4707, Train Accuracy: 77.43%, Test Loss: 0.5045, Test Accuracy: 74.49%
-Epoch 13/30, Train Loss: 0.4620, Train Accuracy: 77.70%, Test Loss: 0.4959, Test Accuracy: 75.47%
-Epoch 14/30, Train Loss: 0.4530, Train Accuracy: 78.32%, Test Loss: 0.4718, Test Accuracy: 77.12%
-Epoch 15/30, Train Loss: 0.4470, Train Accuracy: 78.94%, Test Loss: 0.4731, Test Accuracy: 76.82%
-Epoch 16/30, Train Loss: 0.4394, Train Accuracy: 79.35%, Test Loss: 0.4851, Test Accuracy: 75.81%
-Epoch 17/30, Train Loss: 0.4303, Train Accuracy: 79.88%, Test Loss: 0.4776, Test Accuracy: 76.19%
-Epoch 18/30, Train Loss: 0.4221, Train Accuracy: 80.56%, Test Loss: 0.4628, Test Accuracy: 77.71%
-Epoch 19/30, Train Loss: 0.4114, Train Accuracy: 81.00%, Test Loss: 0.4900, Test Accuracy: 75.30%
-Epoch 20/30, Train Loss: 0.4013, Train Accuracy: 81.86%, Test Loss: 0.4702, Test Accuracy: 77.20%
-Epoch 21/30, Train Loss: 0.3918, Train Accuracy: 82.15%, Test Loss: 0.4626, Test Accuracy: 77.12%
-Epoch 22/30, Train Loss: 0.3821, Train Accuracy: 82.89%, Test Loss: 0.4650, Test Accuracy: 77.80%
-Epoch 23/30, Train Loss: 0.3720, Train Accuracy: 83.67%, Test Loss: 0.4935, Test Accuracy: 75.21%
-Epoch 24/30, Train Loss: 0.3579, Train Accuracy: 84.18%, Test Loss: 0.4721, Test Accuracy: 76.78%
-Epoch 25/30, Train Loss: 0.3468, Train Accuracy: 85.14%, Test Loss: 0.4700, Test Accuracy: 77.25%
-Epoch 26/30, Train Loss: 0.3332, Train Accuracy: 85.62%, Test Loss: 0.4778, Test Accuracy: 76.65%
-Epoch 27/30, Train Loss: 0.3239, Train Accuracy: 86.07%, Test Loss: 0.4946, Test Accuracy: 75.85%
-Early stopping!
-Total training time: 5206.85 seconds
-AUC: 0.8405
+Epoch 1/30, Train Loss: 0.5380, Train Accuracy: 72.95%, Test Loss: 0.4599, Test Accuracy: 77.84%
+Epoch 2/30, Train Loss: 0.4262, Train Accuracy: 80.79%, Test Loss: 0.4505, Test Accuracy: 78.22%
+Epoch 3/30, Train Loss: 0.3118, Train Accuracy: 86.95%, Test Loss: 0.4914, Test Accuracy: 78.69%
+Epoch 4/30, Train Loss: 0.2071, Train Accuracy: 91.83%, Test Loss: 0.6593, Test Accuracy: 77.92%
+Epoch 5/30, Train Loss: 0.1626, Train Accuracy: 93.48%, Test Loss: 0.8006, Test Accuracy: 78.47%
+Epoch 6/30, Train Loss: 0.1113, Train Accuracy: 96.05%, Test Loss: 0.7448, Test Accuracy: 77.33%
+AUC: 0.8293
 Precision: 0.8420
 Recall: 0.8228
 F1 Score: 0.8323

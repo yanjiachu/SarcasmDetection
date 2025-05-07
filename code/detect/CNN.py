@@ -300,7 +300,7 @@ if __name__ == '__main__':
     # 计算ROC和AUC
     fpr, tpr, _ = roc_curve(true_labels, pred_probs)
     roc_auc = auc(fpr, tpr)
-    np.savez('../../ROC/cnn.npz', fpr=fpr, tpr=tpr, auc=roc_auc)
+    # np.savez('../../ROC/cnn.npz', fpr=fpr, tpr=tpr, auc=roc_auc)
 
     # 绘制ROC曲线
     # plot_roc_curve(fpr, tpr, roc_auc, path=f'../../ROC/cnn.png')

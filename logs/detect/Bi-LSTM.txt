@@ -1,19 +1,4 @@
-Epoch 1/30, Train Loss: 0.5913, Train Accuracy: 68.67%, Test Loss: 0.5665, Test Accuracy: 69.15%
-Epoch 2/30, Train Loss: 0.5411, Train Accuracy: 72.38%, Test Loss: 0.5358, Test Accuracy: 72.80%
-Epoch 3/30, Train Loss: 0.5225, Train Accuracy: 73.95%, Test Loss: 0.5223, Test Accuracy: 73.94%
-Epoch 4/30, Train Loss: 0.5113, Train Accuracy: 74.82%, Test Loss: 0.5211, Test Accuracy: 74.66%
-Epoch 5/30, Train Loss: 0.4992, Train Accuracy: 75.33%, Test Loss: 0.5076, Test Accuracy: 74.58%
-Epoch 6/30, Train Loss: 0.4908, Train Accuracy: 75.92%, Test Loss: 0.5113, Test Accuracy: 75.97%
-Epoch 7/30, Train Loss: 0.4819, Train Accuracy: 76.57%, Test Loss: 0.4986, Test Accuracy: 76.10%
-Epoch 8/30, Train Loss: 0.4728, Train Accuracy: 77.21%, Test Loss: 0.5065, Test Accuracy: 75.76%
-Epoch 9/30, Train Loss: 0.4645, Train Accuracy: 77.86%, Test Loss: 0.5003, Test Accuracy: 75.85%
-Epoch 10/30, Train Loss: 0.4564, Train Accuracy: 78.23%, Test Loss: 0.5046, Test Accuracy: 74.66%
-Epoch 11/30, Train Loss: 0.4467, Train Accuracy: 78.73%, Test Loss: 0.5130, Test Accuracy: 73.98%
-Epoch 12/30, Train Loss: 0.4362, Train Accuracy: 79.31%, Test Loss: 0.5097, Test Accuracy: 74.49%
-Early stopping!
-Total training time: 2792.28 seconds
-
-AUC: 0.7997
-Precision: 0.7886
-Recall: 0.8785
-F1 Score: 0.8311
+AUC: 0.8398
+Precision: 0.8002
+Recall: 0.9000
+F1 Score: 0.8472
