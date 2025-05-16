@@ -11,7 +11,7 @@
 ### 3. 细粒度讽刺目标识别：
 采用序列标注算法，从目标语句中准确识别讽刺目标实体。
 
-## Project Structure
+## 项目结构
 
 ```text
 SarcasmDetection/
