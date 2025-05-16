@@ -11,6 +11,42 @@
 ### 3. 细粒度讽刺目标识别：
 采用序列标注算法，从目标语句中准确识别讽刺目标实体。
 
+## Project Structure
+
+```text
+SarcasmDetection/
+|
+├── code/
+|   ├── detect/
+|   |   ├── baseline.py
+|   |   ├── Bi-LSTM.py
+|   |   ├── CNN.py
+|   |   └── CSH-Net.py
+|   |
+|   ├── classify/
+|   |   ├── baseline.py
+|   |   ├── Bi-LSTM.py
+|   |   ├── CNN.py
+|   |   └── CSH-Net.py
+|   |
+|   └── identify/
+|       ├── baseline.py
+|       ├── Bi-LSTM.py
+|       ├── CNN.py
+|       └── CSH-Net.py
+|
+├── data/
+|   ├── train.json
+|   └── train_topic.json
+|
+├── ROC/
+|   └── ...
+|
+└── ConfusionMatrix/
+    └── ...
+
+```
+
 ## 数据集
 
 数据集详见[CCAC2024讽刺计算数据集](https://github.com/pjzj220113/chinese-sarcasm-calculation)

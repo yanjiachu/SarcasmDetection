@@ -4,4 +4,3 @@ chinese-lert-base/
 chinese-macbert-base/
 models/
 logs/
-test.py
