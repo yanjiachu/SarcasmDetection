@@ -2,8 +2,6 @@
 bert-base-chinese/
 chinese-lert-base/
 chinese-macbert-base/
-training_curves/
-word2vec/
 models/
-ROC/
+logs/
 test.py

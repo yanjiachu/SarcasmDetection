@@ -18,16 +18,16 @@ train_path = '../../data/train.json'
 train_topic_path = '../../data/train_topic.json'
 # model_path = '../../bert-base-chinese'
 model_path = '../../chinese-lert-base'
-best_model_path = '../../models/identify/lert+SC_Hybrid.pth'
+best_model_path = '../../models/identify/lert+CSH.pth'
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(f"device: {device}")
 
 # 定义标签
 label2id = {'B-ORG': 0, 'I-ORG': 1, 'O': 2}
 
-class SC_Hybrid(torch.nn.Module):
+class CSH(torch.nn.Module):
     def __init__(self, input_size, hidden_size, num_labels, dropout_prob):
-        super(SC_Hybrid, self).__init__()
+        super(CSH, self).__init__()
 
         # CNN 分支
         self.conv3 = torch.nn.Conv1d(input_size, hidden_size, kernel_size=3, padding=1)
@@ -82,7 +82,7 @@ class MyModel(torch.nn.Module):
     def __init__(self, hidden_size, num_labels, dropout_prob):
         super(MyModel, self).__init__()
         self.bert = BertModel.from_pretrained(model_path)
-        self.hybrid = SC_Hybrid(
+        self.hybrid = CSH(
             input_size=self.bert.config.hidden_size,
             hidden_size=hidden_size,
             num_labels=num_labels,
