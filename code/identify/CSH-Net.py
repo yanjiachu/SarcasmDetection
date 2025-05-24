@@ -34,31 +34,30 @@ class CSH(torch.nn.Module):
         self.conv5 = torch.nn.Conv1d(input_size, hidden_size, kernel_size=5, padding=2)
         self.conv7 = torch.nn.Conv1d(input_size, hidden_size, kernel_size=7, padding=3)
 
-        # CNN 特征处理层 (不再需要降维，保持序列长度)
-        self.cnn_proj = torch.nn.Linear(hidden_size * 3, hidden_size)
+        # CNN 特征池化层
+        self.cnn_pool = torch.nn.Linear(hidden_size * 3, hidden_size)
 
         # Bi-LSTM 分支
         self.lstm = torch.nn.LSTM(input_size, hidden_size // 2, num_layers=2, bidirectional=True, batch_first=True)
 
-        # 动态融合门 (对每个token单独计算)
-        self.fusion_gate_cnn = torch.nn.Linear(hidden_size, 1)  # 为每个token的CNN特征计算权重
-        self.fusion_gate_lstm = torch.nn.Linear(hidden_size, 1)  # 为每个token的LSTM特征计算权重
+        # 动态融合 (对每个token单独计算)
+        self.fusion_gate_cnn = torch.nn.Linear(hidden_size, 1)
+        self.fusion_gate_lstm = torch.nn.Linear(hidden_size, 1)
 
-        # 分类器 (对每个token进行分类)
+        # 分类层 (对每个token进行分类)
         self.classifier = torch.nn.Linear(hidden_size, num_labels)
 
         self.dropout = torch.nn.Dropout(dropout_prob)
 
     def forward(self, x):
         # 输入形状: [batch_size, seq_len, input_size]
-
         # CNN 分支
         x_cnn = x.transpose(1, 2)  # [batch, input_size, seq_len]
         cnn3 = torch.relu(self.conv3(x_cnn)).transpose(1, 2)  # [batch, seq_len, hidden_size]
         cnn5 = torch.relu(self.conv5(x_cnn)).transpose(1, 2)  # [batch, seq_len, hidden_size]
         cnn7 = torch.relu(self.conv7(x_cnn)).transpose(1, 2)  # [batch, seq_len, hidden_size]
         cnn_feat = torch.cat([cnn3, cnn5, cnn7], dim=2)  # [batch, seq_len, hidden_size * 3]
-        cnn_feat = self.cnn_proj(cnn_feat)  # [batch, seq_len, hidden_size]
+        cnn_feat = self.cnn_pool(cnn_feat)  # [batch, seq_len, hidden_size]
 
         # Bi-LSTM 分支
         lstm_feat, _ = self.lstm(x)  # [batch, seq_len, hidden_size]
@@ -99,12 +98,12 @@ class MyModel(torch.nn.Module):
         )
         hidden_states = outputs.last_hidden_state  # [batch_size, seq_len, hidden_size]
 
-        # 通过SC_Hybrid模块
-        logits = self.hybrid(hidden_states)  # [batch_size, seq_len, num_labels]
+        # 通过CSH混合模块
+        logits = self.hybrid(hidden_states)
 
         if labels is not None:
             loss_fct = torch.nn.CrossEntropyLoss(weight=self.loss_weights)
-            # 只计算有效token的loss (忽略padding部分)
+            # 只计算有效token的loss
             active_loss = attention_mask.view(-1) == 1
             active_logits = logits.view(-1, self.hybrid.classifier.out_features)[active_loss]
             active_labels = labels.view(-1)[active_loss]
@@ -223,7 +222,7 @@ def compute_exact_match_f1(true_labels, pred_labels, offsets_mapping, original_t
         offsets = offsets_mapping[i]
         text = original_texts[i]
 
-        # 提取真实和预测的Span（B-ORG/I-ORG连续的区间）
+        # 提取真实和预测的Span
         def extract_spans(labels):
             spans = []
             current_span = []
@@ -327,7 +326,6 @@ def compute_dice_score(true_labels, pred_labels, label2id):
         total_pred_unique += len(pred_spans)
         total_common += len(true_spans & pred_spans)
 
-    # Avoid division by zero
     if total_true_unique + total_pred_unique == 0:
         return 0.0
 
@@ -378,110 +376,110 @@ if __name__ == '__main__':
     patience = patience_num
     best_acc = 0
 
-    # # 训练循环
-    # print("Training...")
-    # start_time = time.time()
-    # for epoch in range(1, num_epochs + 1):
-    #     model.train()  # 设置模型为训练模式
-    #     total_loss = 0.0
-    #     total_correct_comments = 0
-    #     total_comments = 0
-    #
-    #     # 训练每一批次
-    #     for batch in train_loader:
-    #         input_ids = batch['input_ids'].to(device)
-    #         attention_mask = batch['attention_mask'].to(device)
-    #         labels = batch['labels'].to(device)
-    #
-    #         optimizer.zero_grad()
-    #
-    #         # 获取 logits 和 loss
-    #         logits, loss = model(input_ids, attention_mask, labels=labels)
-    #         loss.backward()
-    #         optimizer.step()
-    #
-    #         total_loss += loss.item()
-    #
-    #         # 计算评论级别的训练精度
-    #         predictions = torch.argmax(logits, dim=2)
-    #         batch_true_labels = labels.cpu().numpy()
-    #         batch_pred_labels = predictions.cpu().numpy()
-    #
-    #         # 逐条评论检查是否所有token都预测正确
-    #         for i in range(len(batch_true_labels)):
-    #             is_correct = np.all(batch_true_labels[i] == batch_pred_labels[i])
-    #             total_correct_comments += int(is_correct)
-    #             total_comments += 1
-    #
-    #     avg_train_loss = total_loss / len(train_loader)
-    #     train_losses.append(avg_train_loss)
-    #
-    #     # 计算并保存评论级别的训练精度
-    #     train_accuracy = total_correct_comments / total_comments
-    #     train_accuracies.append(train_accuracy)
-    #
-    #     # 测试阶段
-    #     model.eval()
-    #     true_labels = []
-    #     pred_labels = []
-    #     comment_correctness = []
-    #     total_test_loss = 0.0
-    #
-    #     with torch.no_grad():
-    #         for batch in test_loader:
-    #             input_ids = batch['input_ids'].to(device)
-    #             attention_mask = batch['attention_mask'].to(device)
-    #             labels = batch['labels'].to(device)
-    #
-    #             # 获取 logits 和 loss
-    #             logits, test_loss = model(input_ids, attention_mask, labels=labels)
-    #             predictions = torch.argmax(logits, dim=2)
-    #
-    #             # 累加测试损失
-    #             total_test_loss += test_loss.item()
-    #
-    #             # 将预测结果和真实标签转换为CPU和numpy格式
-    #             batch_true_labels = labels.cpu().numpy()
-    #             batch_pred_labels = predictions.cpu().numpy()
-    #
-    #             # 逐条评论检查是否所有token都预测正确
-    #             for i in range(len(batch_true_labels)):
-    #                 is_correct = np.all(batch_true_labels[i] == batch_pred_labels[i])
-    #                 comment_correctness.append(is_correct)
-    #
-    #             # 保存token级别的结果
-    #             true_labels.extend(batch_true_labels)
-    #             pred_labels.extend(batch_pred_labels)
-    #
-    #     # 计算评论级别的准确率
-    #     comment_accuracy = np.mean(comment_correctness)
-    #     test_accuracies.append(comment_accuracy)
-    #
-    #     # 计算并保存测试损失
-    #     avg_test_loss = total_test_loss / len(test_loader)
-    #     test_losses.append(avg_test_loss)
-    #
-    #     # 打印结果
-    #     print(f"Epoch {epoch}/{num_epochs}, "
-    #           f"Train Loss: {avg_train_loss:.4f}, "
-    #           f"Train Acc: {train_accuracy * 100:.2f}%, "
-    #           f"Test Loss: {avg_test_loss:.4f}, "
-    #           f"Test Acc: {comment_accuracy * 100:.2f}%")
-    #
-    #     # 早停机制
-    #     if comment_accuracy > best_acc:
-    #         patience = patience_num
-    #         best_acc = comment_accuracy
-    #         # torch.save(model.state_dict(), best_model_path)
-    #     else:
-    #         patience -= 1
-    #         if patience == 0:
-    #             print("Early stopping!")
-    #             break
-    #
-    # end_time = time.time()
-    # total_training_time = end_time - start_time
-    # print(f"Total training time: {total_training_time:.2f} seconds")
+    # 训练循环
+    print("Training...")
+    start_time = time.time()
+    for epoch in range(1, num_epochs + 1):
+        model.train()  # 设置模型为训练模式
+        total_loss = 0.0
+        total_correct_comments = 0
+        total_comments = 0
+
+        # 训练每一批次
+        for batch in train_loader:
+            input_ids = batch['input_ids'].to(device)
+            attention_mask = batch['attention_mask'].to(device)
+            labels = batch['labels'].to(device)
+
+            optimizer.zero_grad()
+
+            # 获取 logits 和 loss
+            logits, loss = model(input_ids, attention_mask, labels=labels)
+            loss.backward()
+            optimizer.step()
+
+            total_loss += loss.item()
+
+            # 计算评论级别的训练精度
+            predictions = torch.argmax(logits, dim=2)
+            batch_true_labels = labels.cpu().numpy()
+            batch_pred_labels = predictions.cpu().numpy()
+
+            # 逐条评论检查是否所有token都预测正确
+            for i in range(len(batch_true_labels)):
+                is_correct = np.all(batch_true_labels[i] == batch_pred_labels[i])
+                total_correct_comments += int(is_correct)
+                total_comments += 1
+
+        avg_train_loss = total_loss / len(train_loader)
+        train_losses.append(avg_train_loss)
+
+        # 计算并保存评论级别的训练精度
+        train_accuracy = total_correct_comments / total_comments
+        train_accuracies.append(train_accuracy)
+
+        # 测试阶段
+        model.eval()
+        true_labels = []
+        pred_labels = []
+        comment_correctness = []
+        total_test_loss = 0.0
+
+        with torch.no_grad():
+            for batch in test_loader:
+                input_ids = batch['input_ids'].to(device)
+                attention_mask = batch['attention_mask'].to(device)
+                labels = batch['labels'].to(device)
+
+                # 获取 logits 和 loss
+                logits, test_loss = model(input_ids, attention_mask, labels=labels)
+                predictions = torch.argmax(logits, dim=2)
+
+                # 累加测试损失
+                total_test_loss += test_loss.item()
+
+                # 将预测结果和真实标签转换为CPU和numpy格式
+                batch_true_labels = labels.cpu().numpy()
+                batch_pred_labels = predictions.cpu().numpy()
+
+                # 逐条评论检查是否所有token都预测正确
+                for i in range(len(batch_true_labels)):
+                    is_correct = np.all(batch_true_labels[i] == batch_pred_labels[i])
+                    comment_correctness.append(is_correct)
+
+                # 保存token级别的结果
+                true_labels.extend(batch_true_labels)
+                pred_labels.extend(batch_pred_labels)
+
+        # 计算评论级别的准确率
+        comment_accuracy = np.mean(comment_correctness)
+        test_accuracies.append(comment_accuracy)
+
+        # 计算并保存测试损失
+        avg_test_loss = total_test_loss / len(test_loader)
+        test_losses.append(avg_test_loss)
+
+        # 打印结果
+        print(f"Epoch {epoch}/{num_epochs}, "
+              f"Train Loss: {avg_train_loss:.4f}, "
+              f"Train Acc: {train_accuracy * 100:.2f}%, "
+              f"Test Loss: {avg_test_loss:.4f}, "
+              f"Test Acc: {comment_accuracy * 100:.2f}%")
+
+        # 早停机制
+        if comment_accuracy > best_acc:
+            patience = patience_num
+            best_acc = comment_accuracy
+            # torch.save(model.state_dict(), best_model_path)
+        else:
+            patience -= 1
+            if patience == 0:
+                print("Early stopping!")
+                break
+
+    end_time = time.time()
+    total_training_time = end_time - start_time
+    print(f"Total training time: {total_training_time:.2f} seconds")
 
     # 加载最佳模型
     model.load_state_dict(torch.load(best_model_path))
@@ -509,7 +507,7 @@ if __name__ == '__main__':
                 return_tensors='pt'
             )
 
-            # 获取真实标签（与Dataset中相同的逻辑）
+            # 获取真实标签
             offsets = encoding['offset_mapping'].squeeze().tolist()
             labels = [label2id['O']] * len(offsets)
             for target in item['sarcasmTarget']:

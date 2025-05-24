@@ -1,7 +1,6 @@
 import matplotlib.pyplot as plt
 import numpy as np
 
-# 加载所有模型的ROC数据
 data1 = np.load('baseline.npz')
 data2 = np.load('cnn.npz')
 data3 = np.load('lstm.npz')
@@ -20,7 +19,6 @@ plt.plot(data4['fpr'], data4['tpr'],
 plt.plot(data5['fpr'], data5['tpr'],
          label=f'static-CSH-Net (AUC = {data5["auc"]:.3f})')
 
-# 绘制对角线
 plt.plot([0, 1], [0, 1], 'k--', label='Random Guess')
 
 plt.xlabel('False Positive Rate')
